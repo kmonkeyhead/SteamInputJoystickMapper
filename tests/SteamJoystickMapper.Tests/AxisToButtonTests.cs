@@ -1,3 +1,4 @@
+using SteamJoystickMapper.Devices;
 using SteamJoystickMapper.Backup;
 using SteamJoystickMapper.Mapping;
 using SteamJoystickMapper.Steam;
@@ -305,5 +306,30 @@ public class ThrottleToTriggersTests : IDisposable
             Bindings = { new() { Target = XboxOutput.LeftStickX, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, -1) } },
         });
         Assert.Contains(SteamConfigValidator.ValidateMapper(p).Errors, e => e.Contains("한쪽 방향"));
+    }
+}
+
+/// <summary>감지: 쓰로틀을 바닥까지 내리면 축과 끝단 버튼(17)이 함께 바뀌므로 둘 다 후보로 돌려준다.</summary>
+public class InputDetectorTests
+{
+    private static InputSnapshot Snap(double slider, bool button17) =>
+        new() { Buttons = Enumerable.Range(0, 17).Select(i => i == 16 && button17).ToArray(), Povs = new[] { -1 }, Axes = { [JoyAxis.Slider0] = slider, [JoyAxis.X] = 0 } };
+
+    [Fact]
+    public void ThrottleToBottom_GivesAxisAndEndButton()
+    {
+        var d = new InputDetector();
+        d.Reset(Snap(-0.6, false));
+        var found = d.DetectAll(Snap(-1, true), sensitiveAxis: true);
+        Assert.Equal(new[] { PhysicalInput.FromAxis(JoyAxis.Slider0), PhysicalInput.FromButton(16) }, found);
+        Assert.Equal(-1, d.AxisDirection(Snap(-1, true), JoyAxis.Slider0));
+    }
+
+    [Fact]
+    public void SmallAxisNoise_IsIgnoredForButtons()
+    {
+        var d = new InputDetector();
+        d.Reset(Snap(-0.9, false));
+        Assert.Equal(new[] { PhysicalInput.FromButton(16) }, d.DetectAll(Snap(-1, true)));
     }
 }

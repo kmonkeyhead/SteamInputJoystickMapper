@@ -172,6 +172,24 @@ public partial class MappingEditorWindow : Window
     {
         if (_detectRow != null) _detectRow.IsDetecting = false;
         _detectRow = null;
+        _candidates.Clear();
+        _firstCandidateAt = null;
+    }
+
+    // 감지된 후보: 첫 입력 뒤 잠깐 더 모아서, 여러 개면(예: 쓰로틀 축 + 바닥 버튼 17) 사용자가 고른다
+    private readonly List<PhysicalInput> _candidates = new();
+    private DateTime? _firstCandidateAt;
+    private static readonly TimeSpan CandidateWindow = TimeSpan.FromMilliseconds(700);
+
+    /// <summary>감지된 입력을 이 출력에 맞는 형태로 바꾼다. 맞지 않으면 null (스틱 출력에 버튼 등).</summary>
+    private PhysicalInput? ForTarget(XboxOutput target, PhysicalInput input, InputSnapshot snap)
+    {
+        var kind = XboxOutputInfo.KindOf(target);
+        if (kind == XboxOutputKind.StickAxis) return input.Kind == PhysicalInputKind.Axis ? input : null;
+        // 버튼/트리거 출력에 축: 움직인 방향(행위)만 쓴다. 트위스트 왼쪽 → Twist −, 쓰로틀 0%쪽 → −(기본 0~40%), 100%쪽 → +(60~100%)
+        return input.Kind == PhysicalInputKind.Axis
+            ? PhysicalInput.FromAxisHalf(input.Axis!.Value, _detector.AxisDirection(snap, input.Axis.Value))
+            : input;
     }
 
     private void DetectTick(InputSnapshot snap)
@@ -183,41 +201,55 @@ public partial class MappingEditorWindow : Window
             StopDetect();
             return;
         }
-        var input = _detector.Detect(snap, preferAxis: XboxOutputInfo.KindOf(row.Target) == XboxOutputKind.Trigger);
-        if (input == null) return;
-
         var kind = XboxOutputInfo.KindOf(row.Target);
-        if (kind == XboxOutputKind.Button && input.Kind == PhysicalInputKind.Axis)
+        foreach (var raw in _detector.DetectAll(snap, sensitiveAxis: kind == XboxOutputKind.Trigger))
         {
-            // 움직인 방향만 버튼으로 (예: 트위스트 왼쪽 → Twist (Rz) −)
-            input = PhysicalInput.FromAxisHalf(input.Axis!.Value, _detector.AxisDirection(snap, input.Axis.Value));
+            var input = ForTarget(row.Target, raw, snap);
+            if (input == null)
+            {
+                if (_candidates.Count == 0) DetectStatusText.Text = $"{raw.DisplayName} detected — 스틱 출력에는 축을 움직여 주세요.";
+                continue;
+            }
+            if (_candidates.Any(c => c.Whole == input.Whole)) continue; // 같은 축은 처음 방향만
+            _candidates.Add(input);
+            _firstCandidateAt ??= DateTime.Now;
         }
-        else if (kind == XboxOutputKind.Trigger && input.Kind == PhysicalInputKind.Axis)
-        {
-            // 축 → 트리거는 움직인 방향(행위)으로 정한다: 0%쪽으로 움직이면 −, 100%쪽이면 +.
-            // 범위는 기본값(− 0~40%, + 60~100%)으로 넣고 숫자 칸에서 고친다.
-            input = PhysicalInput.FromAxisHalf(input.Axis!.Value, _detector.AxisDirection(snap, input.Axis.Value));
-        }
-        var compatible = kind switch
-        {
-            XboxOutputKind.StickAxis => input.Kind == PhysicalInputKind.Axis,
-            XboxOutputKind.Trigger => true,
-            _ => true,
-        };
-        if (!compatible)
-        {
-            DetectStatusText.Text = $"{input.DisplayName} detected — 스틱 출력에는 축을 움직여 주세요.";
-            _detector.Reset(snap);
-            return;
-        }
+        if (_firstCandidateAt == null) return;
+        DetectStatusText.Text = $"{row.TargetText}: {string.Join(", ", _candidates.Select(c => c.DisplayName))} 감지...";
+        if (DateTime.Now - _firstCandidateAt < CandidateWindow) return;
 
+        var candidates = _candidates.ToList();
+        StopDetect();
+        if (candidates.Count == 1) AssignInput(row, candidates[0]);
+        else ChooseInput(row, candidates);
+    }
 
+    private void AssignInput(BindingRow row, PhysicalInput input)
+    {
         // 같은 물리 입력이 다른 출력에 이미 연결되어 있으면 옮긴다
         foreach (var other in _rows.Where(r => r != row && r.Source == input)) other.Clear();
         row.SetSource(input);
         DetectStatusText.Text = $"{input.DisplayName} detected → {row.TargetText}";
-        StopDetect();
         Revalidate();
+    }
+
+    /// <summary>여러 입력이 함께 감지되면 메뉴로 하나를 고른다.</summary>
+    private void ChooseInput(BindingRow row, List<PhysicalInput> candidates)
+    {
+        DetectStatusText.Text = $"{row.TargetText}: 여러 입력이 감지되었습니다. 쓸 입력을 고르세요.";
+        var menu = new ContextMenu { PlacementTarget = BindingGrid, Placement = System.Windows.Controls.Primitives.PlacementMode.Center };
+        menu.Items.Add(new MenuItem { Header = $"{row.TargetText}에 쓸 입력:", IsEnabled = false });
+        foreach (var c in candidates)
+        {
+            var item = new MenuItem { Header = c.DisplayName, FontWeight = FontWeights.SemiBold };
+            item.Click += (_, _) => AssignInput(row, c);
+            menu.Items.Add(item);
+        }
+        menu.Items.Add(new Separator());
+        var cancel = new MenuItem { Header = "취소" };
+        cancel.Click += (_, _) => DetectStatusText.Text = "감지 취소";
+        menu.Items.Add(cancel);
+        menu.IsOpen = true;
     }
 
     private void Detect_Click(object sender, RoutedEventArgs e)

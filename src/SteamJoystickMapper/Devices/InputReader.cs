@@ -85,7 +85,7 @@ public sealed class InputReader : IDisposable
 public sealed class InputDetector
 {
     private const double AxisThreshold = 0.5;
-    /// <summary>LT/RT 감지: 작은 범위(예: 쓰로틀 10~20%)도 잡도록 3%만 움직여도 축으로 본다.</summary>
+    /// <summary>LT/RT 감지: 3%만 움직여도 축으로 본다 (쓰로틀 끝단 버튼과 함께 잡히면 사용자가 고름).</summary>
     private const double PreferAxisThreshold = 0.06;
     private InputSnapshot? _baseline;
 
@@ -95,47 +95,33 @@ public sealed class InputDetector
     public int AxisDirection(InputSnapshot current, JoyAxis axis) =>
         current.Axes.GetValueOrDefault(axis) - (_baseline?.Axes.GetValueOrDefault(axis) ?? 0) < 0 ? -1 : 1;
 
-    /// <param name="preferAxis">
-    /// 축을 버튼보다 먼저 본다 (LT/RT 감지용). 쓰로틀을 끝까지 내리면 눌리는 끝단 버튼(T.A320의 버튼 17 등)보다 축을 잡기 위해.
-    /// </param>
-    public PhysicalInput? Detect(InputSnapshot current, bool preferAxis = false)
+    /// <summary>
+    /// 감지 시작 때와 달라진 입력을 모두 돌려준다 (축 → 버튼 → POV 순). 쓰로틀을 바닥까지 내리면 축과 끝단 버튼이
+    /// 함께 바뀌는 것처럼 여러 개가 동시에 잡히면 사용자가 고르도록 하기 위함.
+    /// </summary>
+    /// <param name="sensitiveAxis">LT/RT 감지처럼 작은 축 움직임(3%)도 잡을지.</param>
+    public List<PhysicalInput> DetectAll(InputSnapshot current, bool sensitiveAxis = false)
     {
+        var found = new List<PhysicalInput>();
         if (_baseline == null)
         {
             _baseline = current;
-            return null;
+            return found;
         }
-
-        if (preferAxis)
-        {
-            var moved = current.Axes
-                .Select(kv => (Axis: kv.Key, Delta: Math.Abs(kv.Value - _baseline.Axes.GetValueOrDefault(kv.Key))))
-                .Where(x => x.Delta > PreferAxisThreshold).OrderByDescending(x => x.Delta).FirstOrDefault();
-            if (moved.Delta > 0) return PhysicalInput.FromAxis(moved.Axis);
-        }
-
+        var threshold = sensitiveAxis ? PreferAxisThreshold : AxisThreshold;
+        found.AddRange(current.Axes
+            .Select(kv => (Axis: kv.Key, Delta: Math.Abs(kv.Value - _baseline.Axes.GetValueOrDefault(kv.Key))))
+            .Where(x => x.Delta > threshold).OrderByDescending(x => x.Delta)
+            .Select(x => PhysicalInput.FromAxis(x.Axis)));
         for (var i = 0; i < current.Buttons.Length; i++)
             if (current.Buttons[i] && !(i < _baseline.Buttons.Length && _baseline.Buttons[i]))
-                return PhysicalInput.FromButton(i);
-
+                found.Add(PhysicalInput.FromButton(i));
         for (var i = 0; i < current.Povs.Length; i++)
         {
             var dir = InputSnapshot.PovToDirection(current.Povs[i]);
             var baseDir = i < _baseline.Povs.Length ? InputSnapshot.PovToDirection(_baseline.Povs[i]) : null;
-            if (dir != null && dir != baseDir) return PhysicalInput.FromPov(i, dir.Value);
+            if (dir != null && dir != baseDir) found.Add(PhysicalInput.FromPov(i, dir.Value));
         }
-
-        JoyAxis? best = null;
-        var bestDelta = AxisThreshold;
-        foreach (var (axis, value) in current.Axes)
-        {
-            var delta = Math.Abs(value - _baseline.Axes.GetValueOrDefault(axis));
-            if (delta > bestDelta)
-            {
-                bestDelta = delta;
-                best = axis;
-            }
-        }
-        return best is { } a ? PhysicalInput.FromAxis(a) : null;
+        return found;
     }
 }
