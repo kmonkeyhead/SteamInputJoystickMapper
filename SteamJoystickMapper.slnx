@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SteamJoystickMapper/SteamJoystickMapper.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SteamJoystickMapper.Tests/SteamJoystickMapper.Tests.csproj" />
+  </Folder>
+</Solution>

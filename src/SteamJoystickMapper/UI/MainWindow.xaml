@@ -1,0 +1,87 @@
+<Window x:Class="SteamJoystickMapper.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Monkeyhead Mapper" Width="780" Height="860" MinWidth="640" MinHeight="620"
+        WindowStartupLocation="CenterScreen" FontSize="13">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="Steam Input Joystick Mapper" FontSize="20" FontWeight="Bold"/>
+            <TextBlock x:Name="SteamInfoText" Foreground="Gray" Margin="0,2,0,0" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1">
+            <!-- 프로필 (하나뿐) -->
+            <TextBlock Text="프로필" Style="{StaticResource SectionTitle}"/>
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="가져오기" Click="ImportProfile_Click"/>
+                    <Button Content="내보내기" Click="ExportProfile_Click"/>
+                    <Button Content="프로필 모두 초기화" Click="ResetProfile_Click" Margin="0"/>
+                </StackPanel>
+                <TextBlock x:Name="ProfileNameText" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            </DockPanel>
+            <TextBlock x:Name="ProfileSummaryText" Foreground="DimGray" Margin="4,4,0,0" TextWrapping="Wrap"/>
+
+            <!-- 입력 장치 -->
+            <TextBlock Text="입력 장치" Style="{StaticResource SectionTitle}"/>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="새로고침" Margin="6,0,0,0" Click="RefreshDevices_Click"/>
+                <ComboBox x:Name="DeviceCombo" SelectionChanged="DeviceCombo_SelectionChanged"/>
+            </DockPanel>
+            <TextBlock x:Name="DeviceDetailsText" Foreground="DimGray" Margin="4,4,0,0" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap"/>
+
+            <!-- 대상: 게임 -->
+            <TextBlock Text="게임 (게임마다 매핑)" Style="{StaticResource SectionTitle}"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="GameSearchBox" Margin="0,0,6,0" VerticalContentAlignment="Center"
+                         TextChanged="GameSearchBox_TextChanged" ToolTip="게임 이름 또는 AppID 검색"/>
+                <TextBlock Text="🔍 검색" Foreground="Gray" Margin="6,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                           x:Name="GameSearchHint"/>
+                <ComboBox Grid.Column="1" x:Name="GameCombo" SelectionChanged="GameCombo_SelectionChanged"/>
+            </Grid>
+            <TextBlock x:Name="TargetText" Margin="4,8,0,0" TextWrapping="Wrap"/>
+            <TextBlock x:Name="SteamInputText" Margin="4,4,0,0" TextWrapping="Wrap"/>
+            <WrapPanel Margin="0,8,0,0">
+                <Button x:Name="EditButton" Content="매핑 편집" Style="{StaticResource PrimaryButton}" Click="EditMapping_Click"/>
+                <Button x:Name="RemoveGameButton" Content="게임 매핑 삭제" Click="RemoveGameMapping_Click"/>
+                <Button x:Name="CopyGameButton" Content="다른 게임 매핑 복사" Click="CopyGameMapping_Click"/>
+            </WrapPanel>
+
+            <!-- Steam Input 상태 -->
+            <TextBlock Text="Steam Input 상태" Style="{StaticResource SectionTitle}"/>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="기존 설정 분석" Click="Analyze_Click" Margin="6,0,0,0"/>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse x:Name="StatusDot" Width="11" Height="11" Fill="Gray" Margin="2,0,8,0"/>
+                        <TextBlock x:Name="StatusText" Text="-" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <TextBlock x:Name="StatusDetailText" Foreground="DimGray" Margin="21,2,0,0" TextWrapping="Wrap" FontSize="12"/>
+                </StackPanel>
+            </DockPanel>
+
+            <WrapPanel Margin="0,14,0,0">
+                <Button Content="Steam에 적용" Style="{StaticResource PrimaryButton}" Click="Apply_Click" ToolTip="게임 매핑으로 장치 설정을 만들어 이 조이스틱을 Steam 일반 컨트롤러로 등록하고, 게임별 설정을 씁니다"/>
+                <Button x:Name="DisableButton" Content="Steam에서 비활성화" Click="Disable_Click" ToolTip="장치 설정을 지워 Steam에서 일반 컨트롤러가 아닌 조이스틱으로 보이게 합니다"/>
+                <Button Content="원본 설정 복원" Click="RestoreLatest_Click"/>
+                <Button Content="백업 기록" Click="BackupHistory_Click"/>
+            </WrapPanel>
+        </StackPanel>
+
+        <!-- 로그 -->
+        <DockPanel Grid.Row="2" Margin="0,14,0,0">
+            <TextBlock DockPanel.Dock="Top" Text="로그" Style="{StaticResource SectionTitle}"/>
+            <ListBox x:Name="LogList" FontFamily="Consolas" FontSize="12"/>
+        </DockPanel>
+    </Grid>
+</Window>

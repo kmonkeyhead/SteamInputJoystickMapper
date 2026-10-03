@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vortice.DirectInput" Version="3.8.3" />
+  </ItemGroup>
+
+  <!-- 게시할 때는 증분 빌드 캐시를 쓰지 않고 처음부터 다시 빌드한다 (WPF 임시 프로젝트 _wpftmp 제외). -->
+  <Target Name="CleanIntermediateOnPublish" BeforeTargets="BeforeBuild"
+          Condition="'$(_IsPublishing)' == 'true' And !$(MSBuildProjectName.EndsWith('_wpftmp'))">
+    <Message Importance="high" Text="게시: 이전 빌드 결과 삭제 후 전체 빌드 ($(IntermediateOutputPath), $(OutDir))" />
+    <RemoveDir Directories="$(ProjectDir)$(IntermediateOutputPath);$(OutDir)" />
+  </Target>
+
+</Project>

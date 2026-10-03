@@ -1,0 +1,176 @@
+<Window x:Class="SteamJoystickMapper.UI.MappingEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="매핑 편집" Width="1180" Height="780" MinWidth="900" MinHeight="600"
+        WindowStartupLocation="CenterOwner" FontSize="13" PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </Window.Resources>
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="300"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Orientation="Horizontal">
+            <TextBlock x:Name="ModeText" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
+            <TextBlock x:Name="HeaderText" Foreground="DimGray" VerticalAlignment="Center" Margin="16,0,0,0"/>
+        </StackPanel>
+
+        <WrapPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,10,0,6">
+            <Button Content="비행 스틱 프리셋 (AC8 예제)" Click="Preset_Click"/>
+            <Button Content="POV → D-Pad" Click="PovToDpad_Click"/>
+            <Button Content="모두 지우기" Click="ClearAll_Click"/>
+            <TextBlock x:Name="DetectStatusText" VerticalAlignment="Center" Margin="12,0,0,0" FontWeight="SemiBold" Foreground="DarkOrange"/>
+        </WrapPanel>
+
+        <!-- 매핑 표: 오른쪽 Xbox 출력마다 물리 입력을 지정 -->
+        <DataGrid Grid.Row="2" Grid.Column="0" x:Name="BindingGrid" AutoGenerateColumns="False" CanUserAddRows="False"
+                  CanUserDeleteRows="False" CanUserSortColumns="False" HeadersVisibility="Column" SelectionMode="Single"
+                  RowHeight="30" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#DDD"
+                  MouseDoubleClick="BindingGrid_MouseDoubleClick">
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsDetecting}" Value="True">
+                            <Setter Property="Background" Value="#FFF3D6"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                            <Setter Property="Background" Value="#F0F0F0"/>
+                            <Setter Property="IsEnabled" Value="False"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Header="물리 입력 (조이스틱)" Width="280">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding SourceText}" VerticalAlignment="Center" Margin="6,0"
+                                       FontWeight="{Binding SourceWeight}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="" Width="160">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding IsEditable, Converter={StaticResource BoolToVis}}">
+                                <Button Content="감지" Click="Detect_Click" Padding="8,1" MinWidth="0" Margin="2,2,4,2"/>
+                                <Button Content="지우기" Click="ClearRow_Click" Padding="8,1" MinWidth="0" Margin="0,2,4,2"/>
+                                <Button Content="+" Click="AddInput_Click" Padding="8,1" MinWidth="0" Margin="0,2"
+                                        ToolTip="이 출력에 입력 추가 (예: 쓰로틀과 버튼 둘 다 LT)"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="→ Xbox 출력" Width="140">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding TargetText}" VerticalAlignment="Center" Margin="6,0" FontWeight="SemiBold"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="반전" Width="50">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox IsChecked="{Binding Invert, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding InvertEditable}" HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" Visibility="{Binding HasAxisOptions, Converter={StaticResource BoolToVis}}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="데드존 / 시작 %" Width="95">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <TextBox Text="{Binding DeadZone, UpdateSourceTrigger=PropertyChanged}" Margin="2" VerticalContentAlignment="Center"
+                                         Visibility="{Binding ShowDeadZone, Converter={StaticResource BoolToVis}}"/>
+                                <TextBox Text="{Binding RangeLow, UpdateSourceTrigger=PropertyChanged}" Margin="2" VerticalContentAlignment="Center"
+                                         Visibility="{Binding ShowRange, Converter={StaticResource BoolToVis}}" ToolTip="감지 범위 시작 (축 %)"/>
+                            </Grid>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="외곽 / 끝 %" Width="85">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <TextBox Text="{Binding OuterDeadZone, UpdateSourceTrigger=PropertyChanged}" Margin="2" VerticalContentAlignment="Center"
+                                         Visibility="{Binding ShowOuterDeadZone, Converter={StaticResource BoolToVis}}"/>
+                                <TextBox Text="{Binding RangeHigh, UpdateSourceTrigger=PropertyChanged}" Margin="2" VerticalContentAlignment="Center"
+                                         Visibility="{Binding ShowRange, Converter={StaticResource BoolToVis}}" ToolTip="감지 범위 끝 (축 %)"/>
+                            </Grid>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="출력값" Width="*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ProgressBar Value="{Binding LiveValue, Mode=OneWay}" Minimum="-1" Maximum="1" Height="10" Margin="4,0"
+                                         Visibility="{Binding HasSource, Converter={StaticResource BoolToVis}}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- 실시간 입력 모니터 -->
+        <GroupBox Grid.Row="2" Grid.Column="1" Header="실시간 입력 모니터" Margin="10,0,0,0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="4">
+                    <TextBlock x:Name="MonitorStatusText" Foreground="DimGray" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                    <ItemsControl x:Name="AxisMonitor">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="52"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Name}" FontSize="12"/>
+                                    <ProgressBar Grid.Column="1" Minimum="-1" Maximum="1" Value="{Binding Value, Mode=OneWay}" Height="12"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding Text}" FontFamily="Consolas" FontSize="12" HorizontalAlignment="Right"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="Buttons" FontWeight="SemiBold" Margin="0,10,0,4"/>
+                    <ItemsControl x:Name="ButtonMonitor">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Width="34" Height="24" Margin="0,0,4,4" CornerRadius="3" BorderBrush="#AAA" BorderThickness="1"
+                                        Background="{Binding Background}">
+                                    <TextBlock Text="{Binding Label}" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11"/>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock x:Name="PovMonitorText" FontFamily="Consolas" Margin="0,8,0,0"/>
+                </StackPanel>
+            </ScrollViewer>
+        </GroupBox>
+
+        <!-- 검증 결과 -->
+        <TextBox Grid.Row="3" Grid.ColumnSpan="2" x:Name="ValidationText" IsReadOnly="True" TextWrapping="Wrap" Height="78"
+                 Margin="0,10,0,0" FontSize="12" VerticalScrollBarVisibility="Auto" BorderBrush="#DDD"/>
+
+        <DockPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="0,10,0,0">
+            <TextBlock x:Name="HintText"
+                       Foreground="Gray" TextWrapping="Wrap" FontSize="12" VerticalAlignment="Center" Width="640"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="저장" IsDefault="True" Click="Save_Click" FontWeight="SemiBold"/>
+                <Button Content="취소" IsCancel="True" Margin="0"/>
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</Window>

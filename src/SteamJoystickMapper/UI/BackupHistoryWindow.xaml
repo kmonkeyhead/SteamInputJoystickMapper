@@ -1,0 +1,15 @@
+<Window x:Class="SteamJoystickMapper.UI.BackupHistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="백업 기록" Width="720" Height="460" WindowStartupLocation="CenterOwner" FontSize="13">
+    <DockPanel Margin="12">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="백업 폴더 열기" Click="OpenFolder_Click"/>
+            <Button Content="복원" Click="Restore_Click" FontWeight="SemiBold"/>
+            <Button Content="닫기" IsCancel="True" Click="Close_Click" Margin="0"/>
+        </StackPanel>
+        <TextBlock DockPanel.Dock="Bottom" x:Name="DetailText" Foreground="DimGray" TextWrapping="Wrap" Margin="0,8,0,0" FontSize="12"/>
+        <ListBox x:Name="BackupList" DisplayMemberPath="Display" SelectionChanged="BackupList_SelectionChanged"
+                 FontFamily="Consolas"/>
+    </DockPanel>
+</Window>
