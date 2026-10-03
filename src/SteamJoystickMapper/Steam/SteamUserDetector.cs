@@ -3,11 +3,13 @@ using Microsoft.Win32;
 using SteamJoystickMapper.Logging;
 using SteamJoystickMapper.Steam.Vdf;
 
+using static SteamJoystickMapper.Localization.Loc;
+
 namespace SteamJoystickMapper.Steam;
 
 public sealed record SteamUser(uint AccountId, string SteamId64, string PersonaName, bool MostRecent)
 {
-    public override string ToString() => string.IsNullOrEmpty(PersonaName) ? $"사용자 {AccountId}" : PersonaName;
+    public override string ToString() => string.IsNullOrEmpty(PersonaName) ? T($"사용자 {AccountId}", $"User {AccountId}") : PersonaName;
 }
 
 /// <summary>현재 Steam 사용자를 찾는다. 계정 정보는 로그에 기록되지 않도록 AppLog에 등록한다.</summary>

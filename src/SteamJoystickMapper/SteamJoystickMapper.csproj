@@ -12,6 +12,11 @@
     <PackageReference Include="Vortice.DirectInput" Version="3.8.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 후원하기(한국어) 창의 카카오페이 QR 코드 -->
+    <Resource Include="Assets\kakaopay-donate-qr.png" />
+  </ItemGroup>
+
   <!-- 게시할 때는 증분 빌드 캐시를 쓰지 않고 처음부터 다시 빌드한다 (WPF 임시 프로젝트 _wpftmp 제외). -->
   <Target Name="CleanIntermediateOnPublish" BeforeTargets="BeforeBuild"
           Condition="'$(_IsPublishing)' == 'true' And !$(MSBuildProjectName.EndsWith('_wpftmp'))">

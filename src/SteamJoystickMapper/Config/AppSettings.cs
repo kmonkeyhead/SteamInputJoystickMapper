@@ -22,6 +22,8 @@ public sealed class AppSettings
     public string? LastDeviceInstanceId { get; set; }
     /// <summary>[Steam에 적용] 때 마지막으로 고른 쓰로틀 게임 AppID ("" 또는 null = 쓰로틀 사용 안 함).</summary>
     public string? LastThrottleAppId { get; set; }
+    /// <summary>UI 언어 "ko"/"en". 없으면 시스템 언어로 정한다 (한국어 외는 영어).</summary>
+    public string? Language { get; set; }
 
     public static AppSettings Load()
     {

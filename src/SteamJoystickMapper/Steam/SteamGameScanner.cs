@@ -2,6 +2,8 @@ using System.IO;
 using SteamJoystickMapper.Logging;
 using SteamJoystickMapper.Steam.Vdf;
 
+using static SteamJoystickMapper.Localization.Loc;
+
 namespace SteamJoystickMapper.Steam;
 
 public sealed class SteamGame
@@ -13,7 +15,7 @@ public sealed class SteamGame
     /// <summary>프로필에 이 게임의 매핑이 있는지 (UI에서 갱신).</summary>
     public bool HasMapping { get; set; }
 
-    public string Display => $"{(HasMapping ? "★ " : "")}{Name}  ({AppId}){(Installed ? "" : "  [미설치]")}";
+    public string Display => $"{(HasMapping ? "★ " : "")}{Name}  ({AppId}){(Installed ? "" : T("  [미설치]", "  [not installed]"))}";
     public override string ToString() => Display;
 }
 

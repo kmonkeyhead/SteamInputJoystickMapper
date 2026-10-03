@@ -5,6 +5,7 @@ using SteamJoystickMapper.Logging;
 using SteamJoystickMapper.Mapping;
 using SteamJoystickMapper.Steam.Sdl;
 using SteamJoystickMapper.Steam.Vdf;
+using static SteamJoystickMapper.Localization.Loc;
 
 namespace SteamJoystickMapper.Steam;
 
@@ -76,9 +77,9 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
     {
         var profile = WithThrottleFrom(original, throttleAppId);
         var validation = SteamConfigValidator.ValidateMapper(profile);
-        validation.Warnings.RemoveAll(w => w.Contains("쓰로틀은 특수 처리")); // 적용 단계에서는 이미 골랐음
+        validation.Warnings.RemoveAll(w => w.Contains(SteamConfigValidator.ThrottleWarningMarker)); // 적용 단계에서는 이미 골랐음
         var configDir = env.ControllerConfigDir;
-        if (configDir == null) validation.Errors.Add("Steam 사용자를 찾을 수 없어 설정 폴더를 결정할 수 없습니다.");
+        if (configDir == null) validation.Errors.Add(T("Steam 사용자를 찾을 수 없어 설정 폴더를 결정할 수 없습니다.", "No Steam user found, so the config folder cannot be determined."));
         if (!validation.IsValid || configDir == null) return new ApplyPlan { Profile = profile, Validation = validation };
 
         var device = profile.Device;
@@ -96,13 +97,14 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
             }
             catch (VdfParseException ex)
             {
-                validation.Errors.Add($"config.vdf 분석 실패 - 변경하지 않습니다: {ex.Message}");
+                validation.Errors.Add(T("config.vdf 분석 실패 - 변경하지 않습니다: ", "Failed to parse config.vdf - leaving it unchanged: ") + ex.Message);
             }
         }
         var layout = SteamLayoutPlanner.BuildLayout(profile, existingLayout?.Guid);
         var layoutChanged = existingLayout == null || !SteamLayoutPlanner.SameLayout(existingLayout, layout);
         if (layoutChanged && globalRoot == null && validation.IsValid)
-            validation.Errors.Add("장치 레이아웃을 저장할 config.vdf를 찾을 수 없습니다. Steam을 한 번 실행한 뒤 다시 시도하세요.");
+            validation.Errors.Add(T("장치 레이아웃을 저장할 config.vdf를 찾을 수 없습니다. Steam을 한 번 실행한 뒤 다시 시도하세요.",
+                                    "config.vdf for the device layout was not found. Run Steam once and try again."));
 
         var plan = new ApplyPlan
         {
@@ -111,14 +113,18 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
         };
         var throttleGame = original.FindGame(throttleAppId ?? "");
         var ignored = ThrottleGames(original).Where(g => g.AppId != throttleAppId).Select(g => g.GameName).ToList();
-        if (throttleGame != null) plan.Notes.Add($"쓰로틀: {throttleGame.GameName}의 쓰로틀 설정을 사용합니다.");
-        if (ignored.Count > 0) plan.Notes.Add($"쓰로틀: 다음 게임의 쓰로틀 매핑은 적용하지 않습니다 — {string.Join(", ", ignored)}");
+        if (throttleGame != null) plan.Notes.Add(T($"쓰로틀: {throttleGame.GameName}의 쓰로틀 설정을 사용합니다.",
+                                                   $"Throttle: using the throttle mapping of {throttleGame.GameName}."));
+        if (ignored.Count > 0) plan.Notes.Add(T($"쓰로틀: 다음 게임의 쓰로틀 매핑은 적용하지 않습니다 — {string.Join(", ", ignored)}",
+                                                $"Throttle: these games' throttle mappings are not applied — {string.Join(", ", ignored)}"));
         if (layoutChanged && globalRoot != null)
         {
             plan.Writes[env.GlobalConfigPath] = VdfWriter.Write(SteamConfigGenerator.UpdateGlobalConfig(globalRoot, layout, device));
             plan.Notes.Add(existingLayout == null
-                ? "장치 설정: 이 조이스틱을 Steam 일반 컨트롤러로 등록합니다 (게임 매핑에 쓰인 입력으로 자동 생성)."
-                : "장치 설정: 게임 매핑에 쓰인 입력에 맞게 갱신합니다.");
+                ? T("장치 설정: 이 조이스틱을 Steam 일반 컨트롤러로 등록합니다 (게임 매핑에 쓰인 입력으로 자동 생성).",
+                    "Device layout: registers this joystick as a Steam generic controller (built from the inputs used in game mappings).")
+                : T("장치 설정: 게임 매핑에 쓰인 입력에 맞게 갱신합니다.",
+                    "Device layout: updated to match the inputs used in game mappings."));
         }
 
         // ---- (2) 게임별 ----
@@ -126,7 +132,7 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
         if (File.Exists(controllerTarget.ConfigsetPath))
         {
             try { configsetRoot = VdfParser.ParseFile(controllerTarget.ConfigsetPath); }
-            catch (VdfParseException ex) { validation.Errors.Add($"configset 분석 실패 - 변경하지 않습니다: {ex.Message}"); }
+            catch (VdfParseException ex) { validation.Errors.Add(T("configset 분석 실패 - 변경하지 않습니다: ", "Failed to parse configset - leaving it unchanged: ") + ex.Message); }
         }
         var configset = configsetRoot?.DeepClone() ?? VdfNode.CreateObject("");
         configset.GetOrAddObject("controller_config");
@@ -156,9 +162,10 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
                 CloudConfig = env.User != null && SteamInputConfigFinder.HasCloudConfig(env.SteamPath, env.User.AccountId, game.AppId),
             });
             if (!File.Exists(target.PerGamePath) || !IsManagedFile(target.PerGamePath))
-                plan.Notes.Add($"[{game.GameName}] 기준 문서: {baseDoc.Origin}");
+                plan.Notes.Add($"[{game.GameName}] " + T("기준 문서: ", "Base document: ") + baseDoc.Origin);
             if (selection.Kind == "workshop")
-                plan.Notes.Add($"[{game.GameName}] 현재 {selection}을 사용 중 → 이 앱의 게임 매핑으로 바뀝니다.");
+                plan.Notes.Add(T($"[{game.GameName}] 현재 {selection}을 사용 중 → 이 앱의 게임 매핑으로 바뀝니다.",
+                                 $"[{game.GameName}] currently uses {selection} → it will be replaced by this app's game mapping."));
             plan.Notes.AddRange(genLog.Select(l => $"[{game.GameName}] {l}"));
         }
 
@@ -171,7 +178,8 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
             if (configsetRoot?.Find("controller_config", appId) == null) continue;
             plan.Released.Add((appId, path));
             SteamConfigGenerator.RemoveFromConfigset(configset, appId);
-            plan.Notes.Add($"[{appId}] 게임 매핑이 없어 앱이 만든 설정을 정리합니다 (파일은 백업 폴더로 이동)");
+            plan.Notes.Add(T($"[{appId}] 게임 매핑이 없어 앱이 만든 설정을 정리합니다 (파일은 백업 폴더로 이동)",
+                             $"[{appId}] has no game mapping, so the config this app made is removed (file moved to the backup folder)"));
         }
 
         if (plan.Games.Count > 0 || plan.Released.Count > 0)
@@ -191,7 +199,8 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
                 var toEnable = plan.Games.Where(g => root == null || SteamInputSetting.Read(root, g.AppId) != SteamInputMode.On).ToList();
                 if (toEnable.Count > 0 && text == null)
                 {
-                    validation.Errors.Add("Steam 사용자 설정(localconfig.vdf)이 없어 Steam Input을 켤 수 없습니다. Steam에 한 번 로그인한 뒤 다시 시도하세요.");
+                    validation.Errors.Add(T("Steam 사용자 설정(localconfig.vdf)이 없어 Steam Input을 켤 수 없습니다. Steam에 한 번 로그인한 뒤 다시 시도하세요.",
+                                            "Steam user settings (localconfig.vdf) not found, so Steam Input cannot be enabled. Log in to Steam once and try again."));
                 }
                 else if (toEnable.Count > 0)
                 {
@@ -200,13 +209,14 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
                     {
                         var previous = SteamInputSetting.Read(root!, g.AppId);
                         plan.SteamInputEnabled.Add((g.GameName, previous));
-                        plan.Notes.Add($"[{g.GameName}] 게임 속성 Steam Input: {SteamInputSetting.DisplayName(previous)} → 사용");
+                        plan.Notes.Add($"[{g.GameName}] " + T("게임 속성 Steam Input: ", "Game properties Steam Input: ") +
+                                       $"{SteamInputSetting.DisplayName(previous)} → {SteamInputSetting.DisplayName(SteamInputMode.On)}");
                     }
                 }
             }
             catch (Exception ex) when (ex is VdfParseException or IOException or InvalidDataException)
             {
-                validation.Errors.Add($"localconfig.vdf 분석 실패 - Steam Input을 바꾸지 않습니다: {ex.Message}");
+                validation.Errors.Add(T("localconfig.vdf 분석 실패 - Steam Input을 바꾸지 않습니다: ", "Failed to parse localconfig.vdf - Steam Input is left unchanged: ") + ex.Message);
             }
         }
 
@@ -220,10 +230,11 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
             else if (string.Equals(path, localConfig, StringComparison.OrdinalIgnoreCase))
                 continue; // SteamInputSetting.EnableFor에서 의도한 값만 바뀌었는지 검증함
             else
-                SteamConfigValidator.ValidatePerGame(validation, Path.GetFileName(Path.GetDirectoryName(path)!) + " 게임별 설정", text);
+                SteamConfigValidator.ValidatePerGame(validation, Path.GetFileName(Path.GetDirectoryName(path)!) + T(" 게임별 설정", " per-game config"), text);
         }
         if (existingLayout == null)
-            plan.Notes.Add("팁: Steam 설정 > 컨트롤러에서 이 장치의 레이아웃을 한 번 정의해 두면 Steam이 쓰는 장치 GUID를 그대로 재사용합니다.");
+            plan.Notes.Add(T("팁: Steam 설정 > 컨트롤러에서 이 장치의 레이아웃을 한 번 정의해 두면 Steam이 쓰는 장치 GUID를 그대로 재사용합니다.",
+                             "Tip: define this device's layout once in Steam Settings > Controller and the device GUID Steam uses will be reused."));
         return plan;
     }
 
@@ -234,7 +245,7 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
     public ApplyPlan PrepareDisable(MapperProfile profile)
     {
         var validation = new ValidationResult();
-        if (profile.Device.IsEmpty) validation.Errors.Add("프로필에 입력 장치가 지정되지 않았습니다.");
+        if (profile.Device.IsEmpty) validation.Errors.Add(T("프로필에 입력 장치가 지정되지 않았습니다.", "No input device is set for the profile."));
         var plan = new ApplyPlan { Profile = profile, Validation = validation };
         if (!validation.IsValid || !File.Exists(env.GlobalConfigPath)) return plan;
         try
@@ -244,11 +255,12 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
             var text = VdfWriter.Write(SteamConfigGenerator.RemoveDeviceLayout(root, profile.Device));
             plan.Writes[env.GlobalConfigPath] = text;
             SteamConfigValidator.ValidateGlobal(validation, text, null);
-            plan.Notes.Add("장치 설정: 이 조이스틱의 Steam 일반 컨트롤러 등록을 지웁니다 (Steam에서는 조이스틱으로 보임).");
+            plan.Notes.Add(T("장치 설정: 이 조이스틱의 Steam 일반 컨트롤러 등록을 지웁니다 (Steam에서는 조이스틱으로 보임).",
+                             "Device layout: removes this joystick's Steam generic controller registration (Steam will see it as a joystick)."));
         }
         catch (VdfParseException ex)
         {
-            validation.Errors.Add($"config.vdf 분석 실패 - 변경하지 않습니다: {ex.Message}");
+            validation.Errors.Add(T("config.vdf 분석 실패 - 변경하지 않습니다: ", "Failed to parse config.vdf - leaving it unchanged: ") + ex.Message);
         }
         return plan;
     }
@@ -295,15 +307,15 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
     /// <summary>검증 → 백업 → 쓰기 → 재검증. 실패 시 백업으로 자동 복원.</summary>
     public BackupManifest Execute(ApplyPlan plan)
     {
-        if (!plan.CanApply) throw new InvalidOperationException("검증을 통과하지 못한 설정은 적용할 수 없습니다.");
-        if (_isSteamRunning()) throw new InvalidOperationException("Steam이 실행 중입니다. Steam을 종료한 후 적용하세요.");
+        if (!plan.CanApply) throw new InvalidOperationException(T("검증을 통과하지 못한 설정은 적용할 수 없습니다.", "A config that failed validation cannot be applied."));
+        if (_isSteamRunning()) throw new InvalidOperationException(T("Steam이 실행 중입니다. Steam을 종료한 후 적용하세요.", "Steam is running. Exit Steam and apply again."));
         var touched = plan.Writes.Keys.Concat(plan.Released.Select(r => r.Path)).ToList();
         foreach (var path in touched) EnsureSafePath(path);
 
         var backup = backups.Create(new BackupManifest
         {
             AppId = string.Join(",", plan.Games.Select(g => g.AppId).Concat(plan.Released.Select(r => r.AppId))),
-            GameName = plan.Games.Count == 0 ? "장치 설정" : string.Join(", ", plan.Games.Select(g => g.GameName)),
+            GameName = plan.Games.Count == 0 ? T("장치 설정", "Device layout") : string.Join(", ", plan.Games.Select(g => g.GameName)),
             DeviceName = plan.Profile.Device.Name,
             ControllerId = plan.ControllerId ?? "",
             ProfileName = plan.Profile.ProfileName,
@@ -319,7 +331,7 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
                 File.WriteAllText(tmp, text, Utf8NoBom);
                 File.Move(tmp, path, overwrite: true);
                 var written = File.ReadAllText(path, Utf8NoBom);
-                if (written != text) throw new IOException($"쓰기 검증 실패: {Path.GetFileName(path)}");
+                if (written != text) throw new IOException(T("쓰기 검증 실패: ", "Write verification failed: ") + Path.GetFileName(path));
                 VdfParser.Parse(written);
             }
             // 삭제하지 않고 백업 폴더로 이동 (원본 파일 직접 삭제 금지)
@@ -330,20 +342,21 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
                 File.Move(path, Path.Combine(releasedDir, $"{appId}_{Path.GetFileName(path)}"), overwrite: true);
             }
             AppLog.Info("Validation OK");
-            AppLog.Info($"Config applied (장치 설정{(plan.LayoutChanged ? " 변경" : " 유지")}, 게임 {plan.Games.Count}개, 정리 {plan.Released.Count}개)");
+            AppLog.Info($"Config applied (layout {(plan.LayoutChanged ? "changed" : "kept")}, games {plan.Games.Count}, released {plan.Released.Count})");
             return backup;
         }
         catch (Exception ex)
         {
-            AppLog.Error($"적용 실패, 원본 복원 중: {ex.Message}");
+            AppLog.Error(T("적용 실패, 원본 복원 중: ", "Apply failed, restoring originals: ") + ex.Message);
             try
             {
                 backups.Restore(backup);
-                AppLog.Info("원본 설정 복원 완료");
+                AppLog.Info(T("원본 설정 복원 완료", "Originals restored"));
             }
             catch (Exception restoreEx)
             {
-                AppLog.Error($"자동 복원 실패! 백업 폴더에서 수동 복원이 필요합니다: {backup.Folder} ({restoreEx.Message})");
+                AppLog.Error(T("자동 복원 실패! 백업 폴더에서 수동 복원이 필요합니다: ", "Automatic restore failed! Restore manually from the backup folder: ") +
+                             $"{backup.Folder} ({restoreEx.Message})");
             }
             throw;
         }
@@ -359,8 +372,8 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
         var isGlobalConfig = string.Equals(full, Path.GetFullPath(env.GlobalConfigPath), StringComparison.OrdinalIgnoreCase);
         var isLocalConfig = LocalConfigPath != null && string.Equals(full, Path.GetFullPath(LocalConfigPath), StringComparison.OrdinalIgnoreCase);
         if (!isControllerConfig && !isGlobalConfig && !isLocalConfig)
-            throw new InvalidOperationException($"허용되지 않은 경로에 쓰기 시도: {full}");
+            throw new InvalidOperationException(T("허용되지 않은 경로에 쓰기 시도: ", "Attempted write to a disallowed path: ") + full);
         if (!full.EndsWith(".vdf", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"VDF가 아닌 파일 쓰기 시도: {full}");
+            throw new InvalidOperationException(T("VDF가 아닌 파일 쓰기 시도: ", "Attempted write to a non-VDF file: ") + full);
     }
 }

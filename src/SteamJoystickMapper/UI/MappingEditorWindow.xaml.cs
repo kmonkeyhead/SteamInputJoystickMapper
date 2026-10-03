@@ -11,6 +11,7 @@ using SteamJoystickMapper.Devices;
 using SteamJoystickMapper.Logging;
 using SteamJoystickMapper.Mapping;
 using SteamJoystickMapper.Steam;
+using static SteamJoystickMapper.Localization.Loc;
 
 namespace SteamJoystickMapper.UI;
 
@@ -49,14 +50,21 @@ public partial class MappingEditorWindow : Window
         _game = game;
         _device = device;
 
-        Title = $"매핑 편집 - {game.GameName}";
+        Title = $"{T("매핑 편집", "Edit mapping")} - {game.GameName}";
         ModeText.Text = $"{game.GameName} ({game.AppId})";
-        HintText.Text = "이 게임에서 쓸 매핑입니다. 비워 둔 출력은 이 게임에서 동작하지 않습니다. " +
-                        "버튼 출력에 축을 움직이면 그 방향(−/+)이 버튼이 되며, 데드존 %를 넘게 꺾어야 눌립니다 " +
-                        "(그 축의 스틱은 이 게임에서 스틱으로 쓸 수 없음). " +
-                        "LT/RT [감지]: 쓰로틀을 쓸 방향으로 움직이면 0%쪽은 − 0~40%(0%에서 최대), 100%쪽은 + 60~100%(100%에서 최대)로 들어갑니다. " +
-                        "범위는 시작/끝 % 칸에서 고칠 수 있습니다 (쓰로틀 매핑이 1개면 0~100%, 2개면 − 는 0~50%, + 는 50~100%). " +
-                        "축 반전은 모든 게임이 같아야 합니다.";
+        HintText.Text = T(
+            "이 게임에서 쓸 매핑입니다. 비워 둔 출력은 이 게임에서 동작하지 않습니다. " +
+            "버튼 출력에 축을 움직이면 그 방향(−/+)이 버튼이 되며, 데드존 %를 넘게 꺾어야 눌립니다 " +
+            "(그 축의 스틱은 이 게임에서 스틱으로 쓸 수 없음). " +
+            "LT/RT [감지]: 쓰로틀을 쓸 방향으로 움직이면 0%쪽은 − 0~40%(0%에서 최대), 100%쪽은 + 60~100%(100%에서 최대)로 들어갑니다. " +
+            "범위는 시작/끝 % 칸에서 고칠 수 있습니다 (쓰로틀 매핑이 1개면 0~100%, 2개면 − 는 0~50%, + 는 50~100%). " +
+            "축 반전은 모든 게임이 같아야 합니다.",
+            "The mapping used in this game. Outputs left empty do nothing in this game. " +
+            "Moving an axis for a button output makes that direction (−/+) a button, pressed past the dead zone % " +
+            "(that axis' stick can't be used as a stick in this game). " +
+            "LT/RT [Detect]: move the throttle the way you want — toward 0% gives − 0–40% (max at 0%), toward 100% gives + 60–100% (max at 100%). " +
+            "Edit the range in the start/end % boxes (one throttle mapping: 0–100%; two: − 0–50%, + 50–100%). " +
+            "Axis invert must be the same in every game.");
         HeaderText.Text = $"{profile.ProfileName}   ·   {profile.Device.Name} [{profile.Device.Vid}:{profile.Device.Pid}]";
 
         var bindings = game.Bindings;
@@ -113,7 +121,7 @@ public partial class MappingEditorWindow : Window
     {
         if (_device == null)
         {
-            MonitorStatusText.Text = "프로필의 장치가 연결되어 있지 않습니다. 입력 감지와 모니터를 사용할 수 없습니다.";
+            MonitorStatusText.Text = T("프로필의 장치가 연결되어 있지 않습니다. 입력 감지와 모니터를 사용할 수 없습니다.", "The profile device is not connected. Detection and the monitor are unavailable.");
             return;
         }
         try
@@ -126,8 +134,8 @@ public partial class MappingEditorWindow : Window
         }
         catch (Exception ex)
         {
-            MonitorStatusText.Text = $"장치를 열 수 없습니다: {ex.Message}";
-            AppLog.Warn($"입력 장치 열기 실패: {ex.Message}");
+            MonitorStatusText.Text = $"{T("장치를 열 수 없습니다", "Could not open the device")}: {ex.Message}";
+            AppLog.Warn($"{T("입력 장치 열기 실패", "Failed to open input device")}: {ex.Message}");
         }
     }
 
@@ -136,7 +144,7 @@ public partial class MappingEditorWindow : Window
         var snap = _reader?.Poll();
         if (snap == null)
         {
-            MonitorStatusText.Text = "장치 응답 없음 (분리되었나요?)";
+            MonitorStatusText.Text = T("장치 응답 없음 (분리되었나요?)", "No response from the device (unplugged?)");
             return;
         }
         _last = snap;
@@ -155,7 +163,7 @@ public partial class MappingEditorWindow : Window
     {
         if (_reader == null || _last == null)
         {
-            DetectStatusText.Text = "장치가 연결되어 있지 않아 감지할 수 없습니다.";
+            DetectStatusText.Text = T("장치가 연결되어 있지 않아 감지할 수 없습니다.", "No device connected, cannot detect.");
             return;
         }
         StopDetect();
@@ -164,8 +172,8 @@ public partial class MappingEditorWindow : Window
         _detector.Reset(_last);
         _detectStarted = DateTime.Now;
         DetectStatusText.Text = XboxOutputInfo.KindOf(row.Target) == XboxOutputKind.Trigger
-            ? $"{row.TargetText}: 쓰로틀을 쓸 방향으로 움직이세요 (0%쪽 → 0~40%, 100%쪽 → 60~100%). 버튼을 눌러도 됩니다."
-            : $"{row.TargetText}: 입력을 기다리는 중...";
+            ? $"{row.TargetText}: " + T("쓰로틀을 쓸 방향으로 움직이세요 (0%쪽 → 0~40%, 100%쪽 → 60~100%). 버튼을 눌러도 됩니다.", "move the throttle the way you want (toward 0% → 0–40%, toward 100% → 60–100%), or press a button.")
+            : $"{row.TargetText}: {T("입력을 기다리는 중...", "waiting for input...")}";
     }
 
     private void StopDetect()
@@ -197,7 +205,7 @@ public partial class MappingEditorWindow : Window
         var row = _detectRow!;
         if (DateTime.Now - _detectStarted > TimeSpan.FromSeconds(15))
         {
-            DetectStatusText.Text = "입력이 감지되지 않았습니다.";
+            DetectStatusText.Text = T("입력이 감지되지 않았습니다.", "No input detected.");
             StopDetect();
             return;
         }
@@ -207,7 +215,7 @@ public partial class MappingEditorWindow : Window
             var input = ForTarget(row.Target, raw, snap);
             if (input == null)
             {
-                if (_candidates.Count == 0) DetectStatusText.Text = $"{raw.DisplayName} detected — 스틱 출력에는 축을 움직여 주세요.";
+                if (_candidates.Count == 0) DetectStatusText.Text = $"{raw.DisplayName} detected — {T("스틱 출력에는 축을 움직여 주세요.", "move an axis for a stick output.")}";
                 continue;
             }
             if (_candidates.Any(c => c.Whole == input.Whole)) continue; // 같은 축은 처음 방향만
@@ -215,7 +223,7 @@ public partial class MappingEditorWindow : Window
             _firstCandidateAt ??= DateTime.Now;
         }
         if (_firstCandidateAt == null) return;
-        DetectStatusText.Text = $"{row.TargetText}: {string.Join(", ", _candidates.Select(c => c.DisplayName))} 감지...";
+        DetectStatusText.Text = $"{row.TargetText}: {string.Join(", ", _candidates.Select(c => c.DisplayName))} {T("감지...", "detected...")}";
         if (DateTime.Now - _firstCandidateAt < CandidateWindow) return;
 
         var candidates = _candidates.ToList();
@@ -236,9 +244,9 @@ public partial class MappingEditorWindow : Window
     /// <summary>여러 입력이 함께 감지되면 메뉴로 하나를 고른다.</summary>
     private void ChooseInput(BindingRow row, List<PhysicalInput> candidates)
     {
-        DetectStatusText.Text = $"{row.TargetText}: 여러 입력이 감지되었습니다. 쓸 입력을 고르세요.";
+        DetectStatusText.Text = $"{row.TargetText}: {T("여러 입력이 감지되었습니다. 쓸 입력을 고르세요.", "several inputs were detected. Pick the one to use.")}";
         var menu = new ContextMenu { PlacementTarget = BindingGrid, Placement = System.Windows.Controls.Primitives.PlacementMode.Center };
-        menu.Items.Add(new MenuItem { Header = $"{row.TargetText}에 쓸 입력:", IsEnabled = false });
+        menu.Items.Add(new MenuItem { Header = T($"{row.TargetText}에 쓸 입력:", $"Input for {row.TargetText}:"), IsEnabled = false });
         foreach (var c in candidates)
         {
             var item = new MenuItem { Header = c.DisplayName, FontWeight = FontWeights.SemiBold };
@@ -246,8 +254,8 @@ public partial class MappingEditorWindow : Window
             menu.Items.Add(item);
         }
         menu.Items.Add(new Separator());
-        var cancel = new MenuItem { Header = "취소" };
-        cancel.Click += (_, _) => DetectStatusText.Text = "감지 취소";
+        var cancel = new MenuItem { Header = T("취소", "Cancel") };
+        cancel.Click += (_, _) => DetectStatusText.Text = T("감지 취소", "Detection cancelled");
         menu.Items.Add(cancel);
         menu.IsOpen = true;
     }
@@ -276,7 +284,7 @@ public partial class MappingEditorWindow : Window
         if (e.Key == Key.Escape && _detectRow != null)
         {
             StopDetect();
-            DetectStatusText.Text = "감지 취소";
+            DetectStatusText.Text = T("감지 취소", "Detection cancelled");
             e.Handled = true;
         }
     }
@@ -308,14 +316,14 @@ public partial class MappingEditorWindow : Window
     {
         foreach (var r in _rows) r.Clear();
         ApplyBindings(Presets.AceCombat8(_profile.Device));
-        DetectStatusText.Text = "AC8 예제 적용: 스틱 → 왼쪽 스틱, 쓰로틀 → RT(0~70%), 버튼 14·17 → LT, 트위스트 → LB/RB, 버튼 8/9 → LS/RS, Hat → D-Pad";
+        DetectStatusText.Text = T("AC8 예제 적용: 스틱 → 왼쪽 스틱, 쓰로틀 → RT(0~70%), 버튼 14·17 → LT, 트위스트 → LB/RB, 버튼 8/9 → LS/RS, Hat → D-Pad", "AC8 example applied: stick → left stick, throttle → RT (0–70%), buttons 14·17 → LT, twist → LB/RB, buttons 8/9 → LS/RS, hat → D-pad");
     }
 
     private void PovToDpad_Click(object sender, RoutedEventArgs e)
     {
         if (_profile.Device.PovCount == 0)
         {
-            DetectStatusText.Text = "이 장치에는 POV가 없습니다.";
+            DetectStatusText.Text = T("이 장치에는 POV가 없습니다.", "This device has no POV hat.");
             return;
         }
         ApplyBindings(Presets.PovToDpad(0));
@@ -360,7 +368,7 @@ public partial class MappingEditorWindow : Window
         var v = Validate();
         if (v.Errors.Count == 0 && v.Warnings.Count == 0)
         {
-            ValidationText.Text = "✔ 검증 통과";
+            ValidationText.Text = T("✔ 검증 통과", "✔ Validation passed");
             ValidationText.Foreground = Brushes.DarkGreen;
             return;
         }
@@ -371,8 +379,9 @@ public partial class MappingEditorWindow : Window
     private void Save_Click(object sender, RoutedEventArgs e)
     {
         var v = Validate();
-        if (!v.IsValid && MessageBox.Show(this, "검증 오류가 있습니다. 저장은 가능하지만 오류를 고치기 전에는 Steam에 적용할 수 없습니다.\n저장할까요?",
-                "저장", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        if (!v.IsValid && MessageBox.Show(this, T("검증 오류가 있습니다. 저장은 가능하지만 오류를 고치기 전에는 Steam에 적용할 수 없습니다.\n저장할까요?",
+                    "There are validation errors. You can save, but it cannot be applied to Steam until they are fixed.\nSave anyway?"),
+                T("저장", "Save"), MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
         Result = CurrentBindings();
         DialogResult = true;
@@ -420,7 +429,7 @@ public sealed class BindingRow : Observable
     public string SourceText => IsHeader ? _headerText! : _source == null ? "—" : _source.DisplayName + RangeText;
     /// <summary>쓰로틀 → LT/RT의 감지 범위와 최대 지점 (축 %).</summary>
     private string RangeText => !ShowRange ? "" :
-        _source!.AxisSign < 0 ? $"  ({RangeLow}~{RangeHigh}%, {RangeLow}%에서 최대)" : $"  ({RangeLow}~{RangeHigh}%, {RangeHigh}%에서 최대)";
+        _source!.AxisSign < 0 ? $"  ({RangeLow}~{RangeHigh}%, {T($"{RangeLow}%에서 최대", $"max at {RangeLow}%")})" : $"  ({RangeLow}~{RangeHigh}%, {T($"{RangeHigh}%에서 최대", $"max at {RangeHigh}%")})";
 
     /// <summary>방향 있는 축 → LT/RT: 데드존 대신 감지 범위 시작~끝(축 %)을 입력한다.</summary>
     public bool ShowRange => IsAxisToTrigger && _source is { IsHalfAxis: true };

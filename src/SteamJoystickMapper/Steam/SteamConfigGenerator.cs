@@ -3,6 +3,8 @@ using SteamJoystickMapper.Mapping;
 using SteamJoystickMapper.Steam.Sdl;
 using SteamJoystickMapper.Steam.Vdf;
 
+using static SteamJoystickMapper.Localization.Loc;
+
 namespace SteamJoystickMapper.Steam;
 
 /// <summary>
@@ -46,7 +48,7 @@ public static class SteamConfigGenerator
             try
             {
                 var root = VdfParser.ParseFile(existingPerGamePath);
-                if (root.Get("controller_mappings") != null) return new BaseDocument(root, "기존 Steam 설정");
+                if (root.Get("controller_mappings") != null) return new BaseDocument(root, T("기존 Steam 설정", "existing Steam config"));
             }
             catch (VdfParseException) { /* 템플릿으로 폴백 */ }
         }
@@ -58,12 +60,12 @@ public static class SteamConfigGenerator
                 try
                 {
                     var root = VdfParser.ParseFile(template);
-                    if (root.Get("controller_mappings") != null) return new BaseDocument(root, "Steam 템플릿");
+                    if (root.Get("controller_mappings") != null) return new BaseDocument(root, T("Steam 템플릿", "Steam template"));
                 }
                 catch (VdfParseException) { }
             }
         }
-        return new BaseDocument(MinimalTemplate(), "내장 최소 템플릿");
+        return new BaseDocument(MinimalTemplate(), T("내장 최소 템플릿", "built-in minimal template"));
     }
 
     public static VdfNode Generate(VdfNode baseRoot, MappingProfile profile, PerGamePlan plan, List<string> log)

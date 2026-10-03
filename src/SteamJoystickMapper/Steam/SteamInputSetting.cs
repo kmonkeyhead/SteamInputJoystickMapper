@@ -2,6 +2,8 @@ using System.IO;
 using System.Text;
 using SteamJoystickMapper.Steam.Vdf;
 
+using static SteamJoystickMapper.Localization.Loc;
+
 namespace SteamJoystickMapper.Steam;
 
 /// <summary>게임 속성 &gt; 컨트롤러 &gt; Steam Input 재정의.</summary>
@@ -31,9 +33,9 @@ public static class SteamInputSetting
 
     public static string DisplayName(SteamInputMode mode) => mode switch
     {
-        SteamInputMode.On => "사용",
-        SteamInputMode.Off => "사용 안 함",
-        _ => "기본 설정 사용",
+        SteamInputMode.On => T("사용", "Enabled"),
+        SteamInputMode.Off => T("사용 안 함", "Disabled"),
+        _ => T("기본 설정 사용", "Use default settings"),
     };
 
     /// <summary>파일이 없거나 읽을 수 없으면 기본 설정으로 본다.</summary>

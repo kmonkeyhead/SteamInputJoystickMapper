@@ -1,5 +1,7 @@
 using SteamJoystickMapper.Mapping;
 
+using static SteamJoystickMapper.Localization.Loc;
+
 namespace SteamJoystickMapper.Devices;
 
 public sealed class DeviceInfo
@@ -36,7 +38,7 @@ public sealed class DeviceInfo
         $"Vendor ID: {VidHex}   Product ID: {PidHex}\n" +
         $"Instance ID: {InstanceGuid}\n" +
         $"Axes: {string.Join(", ", Axes.Select(PhysicalInput.AxisDisplayName))}\n" +
-        $"Buttons: {(ButtonCount > 0 ? $"1 ~ {ButtonCount}" : "없음")}   POV: {PovCount}";
+        $"Buttons: {(ButtonCount > 0 ? $"1 ~ {ButtonCount}" : T("없음", "none"))}   POV: {PovCount}";
 
     public override string ToString() => Display;
 }

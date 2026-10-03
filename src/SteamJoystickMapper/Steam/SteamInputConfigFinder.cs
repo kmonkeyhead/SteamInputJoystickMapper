@@ -5,6 +5,8 @@ using SteamJoystickMapper.Logging;
 using SteamJoystickMapper.Mapping;
 using SteamJoystickMapper.Steam.Vdf;
 
+using static SteamJoystickMapper.Localization.Loc;
+
 namespace SteamJoystickMapper.Steam;
 
 /// <summary>게임 + 장치에 대한 Steam Input 설정 파일 위치.</summary>
@@ -24,10 +26,10 @@ public sealed record ConfigSelection(string Kind, string? Value)
 {
     public override string ToString() => Kind switch
     {
-        "autosave" => "사용자 설정(autosave)",
-        "workshop" => $"커뮤니티/클라우드 설정 (workshop {Value})",
-        "template" => $"템플릿 ({Value})",
-        "none" => "설정 없음",
+        "autosave" => T("사용자 설정(autosave)", "user config (autosave)"),
+        "workshop" => T($"커뮤니티/클라우드 설정 (workshop {Value})", $"community/cloud config (workshop {Value})"),
+        "template" => T($"템플릿 ({Value})", $"template ({Value})"),
+        "none" => T("설정 없음", "no config"),
         _ => $"{Kind} {Value}",
     };
 }
@@ -92,7 +94,7 @@ public static class SteamInputConfigFinder
     {
         var sb = new StringBuilder();
         var m = root.Get("controller_mappings");
-        if (m == null) return "controller_mappings 노드가 없습니다 (알 수 없는 포맷).";
+        if (m == null) return T("controller_mappings 노드가 없습니다 (알 수 없는 포맷).", "No controller_mappings node (unknown format).");
         sb.AppendLine($"Controller Type : {m.GetValue("controller_type") ?? "?"}");
         sb.AppendLine($"Controller ID   : {controllerId}");
         sb.AppendLine($"Game AppID      : {appId}");
@@ -103,7 +105,7 @@ public static class SteamInputConfigFinder
         foreach (var group in m.GetAll("group"))
         {
             var id = group.GetValue("id");
-            var src = sources.FirstOrDefault(s => s.Key == id)?.Value ?? "(미사용)";
+            var src = sources.FirstOrDefault(s => s.Key == id)?.Value ?? T("(미사용)", "(unused)");
             sb.AppendLine($"Group {id,-3} {group.GetValue("mode"),-14} ← {src}");
             foreach (var input in group.Get("inputs")?.Children ?? new List<VdfNode>())
             {

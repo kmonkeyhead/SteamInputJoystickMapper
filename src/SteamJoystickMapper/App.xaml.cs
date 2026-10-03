@@ -3,6 +3,8 @@ using System.Windows.Threading;
 using SteamJoystickMapper.Config;
 using SteamJoystickMapper.Logging;
 
+using static SteamJoystickMapper.Localization.Loc;
+
 namespace SteamJoystickMapper;
 
 public partial class App : Application
@@ -15,8 +17,8 @@ public partial class App : Application
 
     private void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        AppLog.Error($"처리되지 않은 오류: {e.Exception}");
-        MessageBox.Show(e.Exception.Message, "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+        AppLog.Error(T("처리되지 않은 오류: ", "Unhandled error: ") + e.Exception);
+        MessageBox.Show(e.Exception.Message, T("오류", "Error"), MessageBoxButton.OK, MessageBoxImage.Error);
         e.Handled = true;
     }
 }

@@ -1,6 +1,8 @@
 using SteamJoystickMapper.Mapping;
 using SteamJoystickMapper.Steam.Sdl;
 
+using static SteamJoystickMapper.Localization.Loc;
+
 namespace SteamJoystickMapper.Steam;
 
 public enum StickSide { Left, Right }
@@ -258,7 +260,7 @@ public static class SteamLayoutPlanner
         foreach (var b in profile.Bindings)
         {
             var key = SdlElements.SourceFor(device, b.Source, invert: false);
-            if (key == null) { reasons.Add($"{b.Source.DisplayName}: 장치에 없는 입력"); return null; }
+            if (key == null) { reasons.Add(b.Source.DisplayName + T(": 장치에 없는 입력", ": input not on the device")); return null; }
             var candidates = reverse.GetValueOrDefault(key) ?? new();
             var kind = XboxOutputInfo.KindOf(b.Target);
             var ok = false;
@@ -278,7 +280,7 @@ public static class SteamLayoutPlanner
                     if (plan.StickOutputs.TryGetValue(stickSource, out var existingSide) && existingSide != targetSide) continue;
                     if (plan.DpadStickDeadZones.ContainsKey(stickSource))
                     {
-                        reasons.Add($"{b.Source.DisplayName}: 같은 스틱 자리를 버튼(방향 패드)으로 쓰고 있어 스틱 출력에 함께 쓸 수 없습니다");
+                        reasons.Add(b.Source.DisplayName + T(": 같은 스틱 자리를 버튼(방향 패드)으로 쓰고 있어 스틱 출력에 함께 쓸 수 없습니다", ": the same stick slot is used as buttons (d-pad), so it cannot also be a stick output"));
                         return null;
                     }
                     plan.StickOutputs[stickSource] = targetSide;
@@ -318,7 +320,7 @@ public static class SteamLayoutPlanner
                     if (xinputName == null) continue;
                     if (plan.StickOutputs.ContainsKey(dstick.Source))
                     {
-                        reasons.Add($"{b.Source.DisplayName}: 같은 스틱 자리({element})를 스틱 출력으로도 쓰고 있어 버튼으로 바꿀 수 없습니다");
+                        reasons.Add(b.Source.DisplayName + T($": 같은 스틱 자리({element})를 스틱 출력으로도 쓰고 있어 버튼으로 바꿀 수 없습니다", $": the same stick slot ({element}) is also a stick output, so it cannot become buttons"));
                         return null;
                     }
                     // 장치 레이아웃에서 반전된 축이면 Steam이 보는 방향도 반대
@@ -357,8 +359,11 @@ public static class SteamLayoutPlanner
             if (!ok)
             {
                 reasons.Add(candidates.Count == 0
-                    ? $"{b.Source.DisplayName}: 장치 설정에 넣을 빈 자리가 없습니다 (모든 게임을 합쳐 쓰는 입력이 너무 많음)"
-                    : $"{b.Source.DisplayName} → {XboxOutputInfo.DisplayName(b.Target)}: 현재 레이아웃({string.Join(", ", candidates.Select(c => c.Element))})으로 표현 불가");
+                    ? b.Source.DisplayName + T(": 장치 설정에 넣을 빈 자리가 없습니다 (모든 게임을 합쳐 쓰는 입력이 너무 많음)",
+                                               ": no free slot in the device layout (too many inputs used across all games)")
+                    : $"{b.Source.DisplayName} → {XboxOutputInfo.DisplayName(b.Target)}: " +
+                      T($"현재 레이아웃({string.Join(", ", candidates.Select(c => c.Element))})으로 표현 불가",
+                        $"cannot be expressed with the current layout ({string.Join(", ", candidates.Select(c => c.Element))})"));
                 return null;
             }
         }
@@ -369,7 +374,7 @@ public static class SteamLayoutPlanner
             if (usedElements.Contains(field.Key)) continue;
             if (StickAxis(field.Key) is { } stick && plan.StickOutputs.ContainsKey(stick.Source))
             {
-                reasons.Add($"같은 스틱 자리({field.Key})의 다른 축도 함께 출력되므로 그 축도 같은 스틱에 매핑해야 합니다");
+                reasons.Add(T($"같은 스틱 자리({field.Key})의 다른 축도 함께 출력되므로 그 축도 같은 스틱에 매핑해야 합니다", $"the other axis of the same stick slot ({field.Key}) is output too, so it must be mapped to the same stick"));
                 return null;
             }
         }

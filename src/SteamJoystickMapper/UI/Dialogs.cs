@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using SteamJoystickMapper.Steam;
+using static SteamJoystickMapper.Localization.Loc;
 
 namespace SteamJoystickMapper.UI;
 
@@ -25,7 +25,7 @@ public static class Dialogs
     }
 
     /// <summary>긴 내용과 함께 예/아니요를 묻는다.</summary>
-    public static bool Confirm(Window owner, string title, string header, string body, string yesText, string noText = "취소")
+    public static bool Confirm(Window owner, string title, string header, string body, string yesText, string? noText = null)
     {
         var result = false;
         var window = new Window
@@ -33,7 +33,7 @@ public static class Dialogs
             Title = title, Owner = owner, Width = 680, Height = 520, WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
         var yes = new Button { Content = yesText, IsDefault = true, Padding = new Thickness(14, 5, 14, 5), Margin = new Thickness(0, 0, 8, 0) };
-        var no = new Button { Content = noText, IsCancel = true, Padding = new Thickness(14, 5, 14, 5) };
+        var no = new Button { Content = noText ?? T("취소", "Cancel"), IsCancel = true, Padding = new Thickness(14, 5, 14, 5) };
         yes.Click += (_, _) => { result = true; window.Close(); };
         no.Click += (_, _) => window.Close();
 
@@ -56,6 +56,7 @@ public static class Dialogs
         return result;
     }
 
+
     /// <summary>
     /// [Steam에 적용] 때 쓰로틀 처리 선택: "쓰로틀 사용 안 함" 또는 "쓰로틀 설정한 게임으로 덮음"(게임 드롭다운).
     /// 취소하면 Cancelled. 사용 안 함이면 AppId = null.
@@ -65,17 +66,18 @@ public static class Dialogs
         var result = (Cancelled: true, AppId: (string?)null);
         var window = new Window
         {
-            Title = "쓰로틀 설정", Owner = owner, Width = 520, SizeToContent = SizeToContent.Height,
+            Title = T("쓰로틀 설정", "Throttle"), Owner = owner, Width = 520, SizeToContent = SizeToContent.Height,
             WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize,
         };
         var panel = new StackPanel { Margin = new Thickness(16) };
         panel.Children.Add(new TextBlock
         {
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12),
-            Text = "쓰로틀 매핑이 있는 게임이 있습니다. 쓰로틀은 장치 설정을 모든 게임이 같이 쓰므로 한 게임의 설정만 적용할 수 있습니다.",
+            Text = T("쓰로틀 매핑이 있는 게임이 있습니다. 쓰로틀은 장치 설정을 모든 게임이 같이 쓰므로 한 게임의 설정만 적용할 수 있습니다.",
+                     "Some games have throttle mappings. The throttle uses the device layout shared by all games, so only one game's throttle setup can be applied."),
         });
-        var none = new RadioButton { Content = "쓰로틀 사용 안 함", Margin = new Thickness(0, 0, 0, 8) };
-        var use = new RadioButton { Content = "쓰로틀 설정한 게임으로 덮음:", Margin = new Thickness(0, 0, 0, 4) };
+        var none = new RadioButton { Content = T("쓰로틀 사용 안 함", "Don't use the throttle"), Margin = new Thickness(0, 0, 0, 8) };
+        var use = new RadioButton { Content = T("쓰로틀 설정한 게임으로 덮음:", "Use the throttle setup of this game:"), Margin = new Thickness(0, 0, 0, 4) };
         var combo = new ComboBox { ItemsSource = games, DisplayMemberPath = nameof(Mapping.GameMapping.GameName), Margin = new Thickness(20, 0, 0, 0) };
         var pre = games.FirstOrDefault(g => g.AppId == preselectAppId);
         combo.SelectedItem = pre ?? games.FirstOrDefault();
@@ -87,10 +89,11 @@ public static class Dialogs
         panel.Children.Add(new TextBlock
         {
             TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DimGray, Margin = new Thickness(0, 10, 0, 0),
-            Text = "고른 게임 외의 쓰로틀 매핑은 이번 적용에서 빠집니다. 고른 값은 다음에도 기본으로 선택됩니다.",
+            Text = T("고른 게임 외의 쓰로틀 매핑은 이번 적용에서 빠집니다. 고른 값은 다음에도 기본으로 선택됩니다.",
+                     "Throttle mappings of other games are left out of this apply. Your choice is remembered for next time."),
         });
-        var ok = new Button { Content = "적용 계속", IsDefault = true, Padding = new Thickness(14, 5, 14, 5), Margin = new Thickness(0, 0, 8, 0) };
-        var cancel = new Button { Content = "취소", IsCancel = true, Padding = new Thickness(14, 5, 14, 5) };
+        var ok = new Button { Content = T("적용 계속", "Continue"), IsDefault = true, Padding = new Thickness(14, 5, 14, 5), Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = T("취소", "Cancel"), IsCancel = true, Padding = new Thickness(14, 5, 14, 5) };
         ok.Click += (_, _) =>
         {
             result = (false, use.IsChecked == true ? (combo.SelectedItem as Mapping.GameMapping)?.AppId : null);
@@ -106,65 +109,34 @@ public static class Dialogs
         return result;
     }
 
-    public static string? Prompt(Window owner, string title, string label, string initial)
+    /// <summary>후원하기 (한국어): 카카오페이 QR 코드 + Ko-fi 버튼. MWOLab의 후원 창과 같은 구성.</summary>
+    public static void ShowDonate(Window owner, string kofiUrl)
     {
-        string? result = null;
         var window = new Window
         {
-            Title = title, Owner = owner, Width = 420, SizeToContent = SizeToContent.Height, ResizeMode = ResizeMode.NoResize,
+            Title = "후원하기", Owner = owner, SizeToContent = SizeToContent.WidthAndHeight, ResizeMode = ResizeMode.NoResize,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
-        var box = new TextBox { Text = initial, Margin = new Thickness(0, 6, 0, 10), Padding = new Thickness(3) };
-        var ok = new Button { Content = "확인", IsDefault = true, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 0, 8, 0) };
-        var cancel = new Button { Content = "취소", IsCancel = true, Padding = new Thickness(14, 4, 14, 4) };
-        ok.Click += (_, _) => { result = box.Text.Trim(); window.Close(); };
-        cancel.Click += (_, _) => window.Close();
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        buttons.Children.Add(ok);
-        buttons.Children.Add(cancel);
-        var panel = new StackPanel { Margin = new Thickness(14) };
-        panel.Children.Add(new TextBlock { Text = label });
-        panel.Children.Add(box);
-        panel.Children.Add(buttons);
+        var panel = new StackPanel { Margin = new Thickness(20) };
+        panel.Children.Add(new TextBlock { Text = "SUPPORT MONKEYHEAD MAPPER", Foreground = Brushes.Gray, FontSize = 11, FontWeight = FontWeights.SemiBold });
+        panel.Children.Add(new TextBlock { Text = "후원하기", FontSize = 18, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 2, 0, 12) });
+        panel.Children.Add(new Border
+        {
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(10), HorizontalAlignment = HorizontalAlignment.Center,
+            Child = new Image
+            {
+                Source = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/Assets/kakaopay-donate-qr.png")),
+                Width = 240, Height = 240, ToolTip = "카카오페이 후원 QR 코드",
+            },
+        });
+        var kofi = new Button { Content = "Ko-fi로 후원하기", Padding = new Thickness(14, 6, 14, 6), Margin = new Thickness(0, 14, 0, 0), HorizontalAlignment = HorizontalAlignment.Stretch };
+        kofi.Click += (_, _) => MainWindow.OpenUrl(kofiUrl);
+        panel.Children.Add(kofi);
+        var close = new Button { Content = "닫기", IsCancel = true, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 8, 0, 0), HorizontalAlignment = HorizontalAlignment.Right };
+        close.Click += (_, _) => window.Close();
+        panel.Children.Add(close);
         window.Content = panel;
-        window.Loaded += (_, _) => { box.Focus(); box.SelectAll(); };
         window.ShowDialog();
-        return string.IsNullOrWhiteSpace(result) ? null : result;
-    }
-
-    public static SteamGame? PickGame(Window owner, string title, IReadOnlyList<SteamGame> games)
-    {
-        SteamGame? result = null;
-        var window = new Window
-        {
-            Title = title, Owner = owner, Width = 520, Height = 520, WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
-        var search = new TextBox { Margin = new Thickness(0, 0, 0, 6), Padding = new Thickness(3) };
-        var list = new ListBox { ItemsSource = games };
-        void Filter()
-        {
-            var q = search.Text.Trim();
-            list.ItemsSource = q.Length == 0 ? games
-                : games.Where(g => g.Name.Contains(q, StringComparison.CurrentCultureIgnoreCase) || g.AppId.Contains(q)).ToList();
-        }
-        search.TextChanged += (_, _) => Filter();
-        var ok = new Button { Content = "선택", IsDefault = true, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 0, 8, 0) };
-        var cancel = new Button { Content = "취소", IsCancel = true, Padding = new Thickness(14, 4, 14, 4) };
-        ok.Click += (_, _) => { result = list.SelectedItem as SteamGame; if (result != null) window.Close(); };
-        list.MouseDoubleClick += (_, _) => { result = list.SelectedItem as SteamGame; if (result != null) window.Close(); };
-        cancel.Click += (_, _) => window.Close();
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 8, 0, 0) };
-        buttons.Children.Add(ok);
-        buttons.Children.Add(cancel);
-        var dock = new DockPanel { Margin = new Thickness(12) };
-        DockPanel.SetDock(search, Dock.Top);
-        DockPanel.SetDock(buttons, Dock.Bottom);
-        dock.Children.Add(search);
-        dock.Children.Add(buttons);
-        dock.Children.Add(list);
-        window.Content = dock;
-        window.Loaded += (_, _) => search.Focus();
-        window.ShowDialog();
-        return result;
     }
 }

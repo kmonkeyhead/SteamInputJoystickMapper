@@ -1,6 +1,8 @@
 using System.IO;
 using SteamJoystickMapper.Logging;
 
+using static SteamJoystickMapper.Localization.Loc;
+
 namespace SteamJoystickMapper.Steam;
 
 /// <summary>탐색된 Steam 환경 (설치 경로, 사용자, 컨트롤러 설정 폴더).</summary>
@@ -20,7 +22,7 @@ public sealed class SteamEnvironment
         var steamPath = SteamLocator.FindSteamPath();
         if (steamPath == null)
         {
-            AppLog.Warn("Steam 설치 경로를 찾을 수 없습니다.");
+            AppLog.Warn(T("Steam 설치 경로를 찾을 수 없습니다.", "Steam install path not found."));
             return null;
         }
         AppLog.Info("Steam detected");
@@ -29,13 +31,13 @@ public sealed class SteamEnvironment
         var env = new SteamEnvironment { SteamPath = steamPath, Users = users, User = SteamUserDetector.DetectCurrent(steamPath, users) };
         if (env.User != null)
         {
-            AppLog.Info($"Userdata detected (사용자 {users.Count}명)");
+            AppLog.Info($"Userdata detected ({users.Count} users)");
             if (env.ControllerConfigDir != null && !Directory.Exists(env.ControllerConfigDir))
-                AppLog.Warn("이 사용자의 Steam Input 설정 폴더가 아직 없습니다. 적용 시 생성됩니다.");
+                AppLog.Warn(T("이 사용자의 Steam Input 설정 폴더가 아직 없습니다. 적용 시 생성됩니다.", "This user has no Steam Input config folder yet. It will be created on apply."));
         }
         else
         {
-            AppLog.Warn("Steam 사용자를 찾을 수 없습니다. Steam에 한 번 로그인하세요.");
+            AppLog.Warn(T("Steam 사용자를 찾을 수 없습니다. Steam에 한 번 로그인하세요.", "No Steam user found. Log in to Steam once."));
         }
         return env;
     }
