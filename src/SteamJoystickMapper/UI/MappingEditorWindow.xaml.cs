@@ -91,6 +91,8 @@ public partial class MappingEditorWindow : Window
         SourceInitialized += (_, _) => StartReader();
         Closed += (_, _) => { _timer.Stop(); _reader?.Dispose(); };
         _timer.Tick += (_, _) => Tick();
+        // 범위 칸에서 벗어나면 쓰로틀 2개 구간(0~50 / 50~100)에 맞춘다
+        AddHandler(LostKeyboardFocusEvent, new KeyboardFocusChangedEventHandler((_, _) => Revalidate()), true);
         Revalidate();
     }
     private BindingRow NewRow(XboxOutput target)
@@ -362,9 +364,47 @@ public partial class MappingEditorWindow : Window
         return r;
     }
 
+    private bool _enforcingSplit;
+
+    /// <summary>
+    /// 한 축에 쓰로틀 매핑이 2개(−/+)면 Steam에서 가운데로 나뉘므로 범위를 − 0~50%, + 50~100% 안으로 맞춘다.
+    /// 입력 중인 칸은 건드리지 않고, 칸을 벗어날 때 맞춘다.
+    /// </summary>
+    private void EnforceThrottleSplit()
+    {
+        if (_enforcingSplit) return;
+        _enforcingSplit = true;
+        try
+        {
+            var editing = (Keyboard.FocusedElement as FrameworkElement)?.DataContext as BindingRow;
+            var throttle = _rows.Where(r => r.IsEditable && r.ShowRange && r.Source?.Axis != null);
+            foreach (var axis in throttle.GroupBy(r => r.Source!.Axis!.Value))
+            {
+                var minus = axis.Where(r => r.Source!.AxisSign < 0).ToList();
+                var plus = axis.Where(r => r.Source!.AxisSign > 0).ToList();
+                if (minus.Count != 1 || plus.Count != 1) continue;
+                if (minus[0] != editing)
+                {
+                    var high = Math.Clamp(minus[0].RangeHigh, 1, 50);
+                    minus[0].RangeHigh = high;
+                    minus[0].RangeLow = Math.Clamp(minus[0].RangeLow, 0, high - 1);
+                }
+                if (plus[0] != editing)
+                {
+                    var low = Math.Clamp(plus[0].RangeLow, 50, 99);
+                    plus[0].RangeLow = low;
+                    plus[0].RangeHigh = Math.Clamp(plus[0].RangeHigh, low + 1, 100);
+                }
+            }
+        }
+        finally { _enforcingSplit = false; }
+    }
+
     private void Revalidate()
     {
         if (!IsInitialized || ValidationText == null) return;
+        if (_enforcingSplit) return;
+        EnforceThrottleSplit();
         var v = Validate();
         if (v.Errors.Count == 0 && v.Warnings.Count == 0)
         {
