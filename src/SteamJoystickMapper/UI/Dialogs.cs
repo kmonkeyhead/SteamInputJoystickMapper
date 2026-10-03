@@ -118,7 +118,6 @@ public static class Dialogs
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
         var panel = new StackPanel { Margin = new Thickness(20) };
-        panel.Children.Add(new TextBlock { Text = "SUPPORT MONKEYHEAD MAPPER", Foreground = Brushes.Gray, FontSize = 11, FontWeight = FontWeights.SemiBold });
         panel.Children.Add(new TextBlock { Text = "후원하기", FontSize = 18, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 2, 0, 12) });
         panel.Children.Add(new Border
         {
@@ -133,9 +132,7 @@ public static class Dialogs
         var kofi = new Button { Content = "Ko-fi로 후원하기", Padding = new Thickness(14, 6, 14, 6), Margin = new Thickness(0, 14, 0, 0), HorizontalAlignment = HorizontalAlignment.Stretch };
         kofi.Click += (_, _) => MainWindow.OpenUrl(kofiUrl);
         panel.Children.Add(kofi);
-        var close = new Button { Content = "닫기", IsCancel = true, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 8, 0, 0), HorizontalAlignment = HorizontalAlignment.Right };
-        close.Click += (_, _) => window.Close();
-        panel.Children.Add(close);
+        window.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Escape) window.Close(); };
         window.Content = panel;
         window.ShowDialog();
     }
