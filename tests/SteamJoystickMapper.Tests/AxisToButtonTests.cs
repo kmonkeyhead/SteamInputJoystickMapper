@@ -6,7 +6,7 @@ using SteamJoystickMapper.Steam.Vdf;
 
 namespace SteamJoystickMapper.Tests;
 
-/// <summary>축 한쪽 방향 → 버튼 (트위스트 −/+ → LB/RB): 게임별 설정에서 스틱을 방향 패드 모드로 바꾸고 데드존을 쓴다.</summary>
+/// <summary>축 한쪽 방향 → 버튼 (트위스트 −/+ → LB/RB): 장치 설정에서 반쪽 축을 바로 버튼 자리에 둔다.</summary>
 public class AxisToButtonTests : IDisposable
 {
     private const uint Account = 123;
@@ -58,53 +58,56 @@ public class AxisToButtonTests : IDisposable
         group.Find("inputs", input, "activators", "Full_Press", "bindings")?.GetValue("binding");
 
     [Fact]
-    public void TwistHalves_BecomeDpadModeWithDeadZone()
+    public void TwistHalves_GoStraightToBumperSlots()
     {
+        // 트위스트 − → LB, + → RB: 장치 설정에서 반쪽 축을 바로 LB/RB 자리에 (Steam 테스트 화면에서도 LB/RB)
         var p = Profile();
         p.Games.Add(TwistBumpers());
         var plan = _service.Prepare(p);
         Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
-        Assert.Equal("a2", plan.Layout!.Get("rightx")); // 트위스트는 장치 설정의 스틱 빈 자리에 자동으로
+        Assert.Equal("-a2", plan.Layout!.Get("leftshoulder"));
+        Assert.Equal("+a2", plan.Layout.Get("rightshoulder"));
+        Assert.Null(plan.Layout.Get("rightx"));
         _service.Execute(plan);
 
-        var group = GameGroupFor("right_joystick", out _);
-        Assert.Equal("dpad", group.GetValue("mode"));
-        Assert.Equal("xinput_button shoulder_left", Binding(group, "dpad_west"));
-        Assert.Equal("xinput_button shoulder_right", Binding(group, "dpad_east"));
-        Assert.Equal((40 * 32767 / 100).ToString(), group.Find("settings")!.GetValue("deadzone"));
-        Assert.Equal("0", group.Find("settings")!.GetValue("requires_click"));
-    }
-
-    [Fact]
-    public void InvertedTwistInLayout_SwapsDirections()
-    {
-        var p = Profile();
-        p.Games.Add(TwistBumpers());
-        var other = Presets.BasicFlightStick(Fixtures.TA320);
-        other.First(b => b.Source.Axis == JoyAxis.Rz).Invert = true; // 다른 게임이 트위스트를 반전된 스틱으로 씀
-        p.Games.Add(new GameMapping { AppId = "2000", GameName = "Other", Bindings = other });
-        var plan = _service.Prepare(p);
-        Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
-        Assert.Equal("a2~", plan.Layout!.Get("rightx"));
-        _service.Execute(plan);
-        var group = GameGroupFor("right_joystick", out _);
-        // 장치 설정에서 반전된 축이면 Steam이 보는 방향이 반대 → 물리적 왼쪽(−)은 dpad_east
-        Assert.Equal("xinput_button shoulder_left", Binding(group, "dpad_east"));
-        Assert.Equal("xinput_button shoulder_right", Binding(group, "dpad_west"));
-    }
-
-    [Fact]
-    public void BackToStick_ReplacesDpadGroupWithoutLeavingIt()
-    {
-        var p = Profile();
-        p.Games.Add(TwistBumpers());
-        _service.Execute(_service.Prepare(p));
-
-        p.Games[0].Bindings = Presets.BasicFlightStick(Fixtures.TA320);
-        _service.Execute(_service.Prepare(p));
-        var group = GameGroupFor("right_joystick", out var m);
-        Assert.Equal("joystick_move", group.GetValue("mode"));
+        var sw = GameGroupFor("switch", out var m);
+        Assert.Equal("xinput_button shoulder_left", Binding(sw, "left_bumper"));
+        Assert.Equal("xinput_button shoulder_right", Binding(sw, "right_bumper"));
         Assert.DoesNotContain(m.GetAll("group"), g => g.GetValue("mode") == "dpad" && Binding(g, "dpad_west") == "xinput_button shoulder_left");
+    }
+
+    [Fact]
+    public void TwistAsStickInAnotherGame_IsRejected()
+    {
+        // 반쪽 축(버튼)과 축 전체(스틱)를 함께 쓰면 Steam이 한쪽을 무시하므로 오류
+        var p = Profile();
+        p.Games.Add(TwistBumpers());
+        p.Games.Add(new GameMapping { AppId = "2000", GameName = "Other", Bindings = Presets.BasicFlightStick(Fixtures.TA320) });
+        Assert.Contains(SteamConfigValidator.ValidateMapper(p).Errors, e => e.Contains("스틱으로 함께 쓸 수 없습니다") && e.Contains("Other"));
+    }
+
+    [Fact]
+    public void TwistToOtherButtons_UsesFreeButtonSlots()
+    {
+        // 트위스트 − → X 인데 X 자리를 버튼이 이미 쓰면 빈 버튼 자리에 반쪽 축을 두고 게임별 설정에서 X로
+        var p = Profile();
+        var game = new GameMapping
+        {
+            AppId = "1000", GameName = "G", Bindings =
+            {
+                new() { Target = XboxOutput.X, Source = PhysicalInput.FromButton(2) },
+                new() { Target = XboxOutput.X, Source = PhysicalInput.FromAxisHalf(JoyAxis.Rz, -1) },
+            },
+        };
+        p.Games.Add(game);
+        var plan = _service.Prepare(p);
+        Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
+        var slot = plan.Layout!.ElementFields.Single(f => f.Value == "-a2").Key;
+        Assert.DoesNotContain("trigger", slot);
+        Assert.NotEqual("x", slot);
+        var (source, input) = SteamLayoutPlanner.ButtonSlot(slot)!.Value;
+        _service.Execute(plan);
+        Assert.Equal("xinput_button X", Binding(GameGroupFor(source, out _), input));
     }
 
     [Fact]

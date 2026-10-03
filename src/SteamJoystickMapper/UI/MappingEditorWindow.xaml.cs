@@ -54,14 +54,14 @@ public partial class MappingEditorWindow : Window
         ModeText.Text = $"{game.GameName} ({game.AppId})";
         HintText.Text = T(
             "이 게임에서 쓸 매핑입니다. 비워 둔 출력은 이 게임에서 동작하지 않습니다. " +
-            "버튼 출력에 축을 움직이면 그 방향(−/+)이 버튼이 되며, 데드존 %를 넘게 꺾어야 눌립니다 " +
-            "(그 축의 스틱은 이 게임에서 스틱으로 쓸 수 없음). " +
+            "버튼 출력에 축을 움직이면 그 방향(−/+)이 버튼이 되며, 반 이상 꺾어야 눌립니다 " +
+            "(그 축은 어느 게임에서도 스틱으로 함께 쓸 수 없음). " +
             "LT/RT [감지]: 쓰로틀을 쓸 방향으로 움직이면 0%쪽은 − 0~40%(0%에서 최대), 100%쪽은 + 60~100%(100%에서 최대)로 들어갑니다. " +
             "범위는 시작/끝 % 칸에서 고칠 수 있습니다 (쓰로틀 매핑이 1개면 0~100%, 2개면 − 는 0~50%, + 는 50~100%). " +
             "축 반전은 모든 게임이 같아야 합니다.",
             "The mapping used in this game. Outputs left empty do nothing in this game. " +
-            "Moving an axis for a button output makes that direction (−/+) a button, pressed past the dead zone % " +
-            "(that axis' stick can't be used as a stick in this game). " +
+            "Moving an axis for a button output makes that direction (−/+) a button, pressed past halfway " +
+            "(that axis can't also be used as a stick in any game). " +
             "LT/RT [Detect]: move the throttle the way you want — toward 0% gives − 0–40% (max at 0%), toward 100% gives + 60–100% (max at 100%). " +
             "Edit the range in the start/end % boxes (one throttle mapping: 0–100%; two: − 0–50%, + 50–100%). " +
             "Axis invert must be the same in every game.");
@@ -485,7 +485,7 @@ public sealed class BindingRow : Observable
     public bool IsAxisToButton => _source is { IsHalfAxis: true } && XboxOutputInfo.KindOf(Target) == XboxOutputKind.Button;
     /// <summary>축 → 트리거: 데드존(%) = Steam "트리거 범위 시작". 축 한쪽 방향이면 가운데에서부터의 비율.</summary>
     public bool IsAxisToTrigger => HasAxisOptions && XboxOutputInfo.KindOf(Target) == XboxOutputKind.Trigger;
-    public bool HasDeadZone => HasAxisOptions && (XboxOutputInfo.KindOf(Target) == XboxOutputKind.StickAxis || IsAxisToButton || IsAxisToTrigger);
+    public bool HasDeadZone => HasAxisOptions && (XboxOutputInfo.KindOf(Target) == XboxOutputKind.StickAxis || IsAxisToTrigger);
     /// <summary>데드존 입력 칸 표시 (스틱 출력, 축 → 버튼, 방향 없는 축 → 트리거).</summary>
     public bool ShowDeadZone => HasDeadZone && !ShowRange;
     /// <summary>외곽 데드존은 스틱 출력에만 의미가 있다.</summary>
@@ -580,9 +580,9 @@ public sealed class BindingRow : Observable
                 break;
             }
             case PhysicalInputKind.Axis when _source.IsHalfAxis:
-                // 축 → 버튼: 그 방향으로 데드존을 넘으면 눌림
+                // 축 → 버튼: 그 방향으로 반 이상 꺾으면 눌림 (Steam 장치 설정의 반쪽 축 → 버튼 기준)
                 v = snap.Axes.GetValueOrDefault(_source.Axis!.Value) * _source.AxisSign!.Value;
-                v = v > DeadZone / 100.0 ? 1 : -1;
+                v = v > 0.5 ? 1 : -1;
                 break;
             case PhysicalInputKind.Axis:
                 v = snap.Axes.GetValueOrDefault(_source.Axis!.Value);

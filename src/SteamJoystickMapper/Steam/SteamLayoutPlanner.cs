@@ -74,7 +74,7 @@ public static class SteamLayoutPlanner
     /// 장치 레이아웃(config.vdf, 장치당 1개)을 모든 게임 매핑에서 자동으로 만든다.
     /// 게임 매핑에 쓰인 물리 입력을 하나도 빠짐없이 레이아웃 자리에 올린다:
     ///   1) 처음 쓰인 출력의 자연스러운 자리(버튼1 → A면 A 자리)가 비어 있으면 그 자리
-    ///   2) 아니면 같은 종류의 빈 자리 (축 → 버튼은 스틱 빈 자리)
+    ///   2) 아니면 같은 종류의 빈 자리 (축 한쪽 방향 → 버튼은 버튼 빈 자리에 반쪽 축 "-a2")
     /// 축 한쪽 방향 → 트리거(쓰로틀 아래쪽 → LT, 위쪽 → RT)는 반쪽 축 그대로 트리거 자리에 둔다 (예: "lefttrigger:-a3").
     /// 게임별 설정이 각 자리를 게임마다 원하는 출력으로 다시 연결한다. 축 반전은 레이아웃에만 있으므로 처음 쓰인 값을 따른다.
     /// </summary>
@@ -99,9 +99,12 @@ public static class SteamLayoutPlanner
                 ? split.Contains(b.Source.Axis!.Value)
                     ? (b.Source.AxisSign < 0 ? "-" : "+") + SdlElements.SourceFor(device, b.Source.Whole, invert: false)
                     : SdlElements.SourceFor(device, b.Source.Whole, invert: b.Source.AxisSign < 0)
-                : SdlElements.SourceFor(device, b.Source.Whole, invert);
+                : IsAxisToButton(b)
+                    ? (b.Source.AxisSign < 0 ? "-" : "+") + SdlElements.SourceFor(device, b.Source.Whole, invert: false)
+                    : SdlElements.SourceFor(device, b.Source.Whole, invert);
         // 같은 축이라도 트리거용(방향별)과 스틱/버튼용은 서로 다른 자리에 둔다
-        string? Key(MappingBinding b) => IsDirectedAxisToTrigger(b) ? "T:" + LayoutSource(b, false) : LayoutSource(b, false);
+        string? Key(MappingBinding b) =>
+            IsDirectedAxisToTrigger(b) ? "T:" + LayoutSource(b, false) : IsAxisToButton(b) ? "B:" + LayoutSource(b, false) : LayoutSource(b, false);
 
         void Place(string element, MappingBinding b, string key)
         {
@@ -117,7 +120,7 @@ public static class SteamLayoutPlanner
         {
             var key = Key(b);
             if (key == null || placed.Contains(key)) continue;
-            var natural = b.Source.IsHalfAxis && !IsDirectedAxisToTrigger(b) ? null : SdlElements.NaturalElement(b.Target);
+            var natural = b.Source.IsHalfAxis && !IsDirectedAxisToTrigger(b) && !IsAxisToButton(b) ? null : SdlElements.NaturalElement(b.Target);
             if (natural != null && layout.Get(natural) == null && Fits(b, natural)) Place(natural, b, key);
             else pending.Add(b);
         }
@@ -125,7 +128,7 @@ public static class SteamLayoutPlanner
         {
             var key = Key(b)!;
             if (placed.Contains(key)) continue;
-            var candidates = b.Source.Kind == PhysicalInputKind.Axis
+            var candidates = b.Source.Kind == PhysicalInputKind.Axis && !IsAxisToButton(b)
                 ? (XboxOutputInfo.KindOf(b.Target) == XboxOutputKind.Trigger
                     ? (IsDirectedAxisToTrigger(b) ? FreeTriggerElements : FreeTriggerElements.Concat(FreeStickElements))
                     : FreeStickElements)
@@ -140,6 +143,14 @@ public static class SteamLayoutPlanner
     /// <summary>방향(−/+)이 있는 축 → LT/RT: 감지 범위(TriggerRange)를 게임별 트리거 범위 시작/끝으로 표현한다.</summary>
     public static bool IsDirectedAxisToTrigger(MappingBinding b) =>
         b.Source.IsHalfAxis && XboxOutputInfo.KindOf(b.Target) == XboxOutputKind.Trigger;
+
+    /// <summary>
+    /// 축 한쪽 방향 → 버튼 (트위스트 − → LB 등). 장치 설정에서 반쪽 축을 바로 버튼 자리에 둔다 ("leftshoulder:-a2").
+    /// 반 이상 꺾으면 눌림 (SDL 반쪽 축 → 버튼 기준). Steam 테스트 화면에서도 그 버튼으로 보인다.
+    /// (이전 방식: 스틱 자리 + 게임별 방향 패드 모드 — 게임에서 동작하지 않아 바꿈)
+    /// </summary>
+    public static bool IsAxisToButton(MappingBinding b) =>
+        b.Source.IsHalfAxis && XboxOutputInfo.KindOf(b.Target) == XboxOutputKind.Button;
 
     /// <summary>게임 하나의 쓰로틀(방향 있는 축 → LT/RT) 매핑.</summary>
     public static IEnumerable<MappingBinding> ThrottleBindings(GameMapping game) => game.Bindings.Where(IsDirectedAxisToTrigger);
@@ -175,9 +186,11 @@ public static class SteamLayoutPlanner
     /// 버튼 → LT/RT는 그 트리거 자리가 비어 있으면 트리거 자리에 직접 둔다("lefttrigger:b13": 누르면 트리거 최대).
     /// 쓰로틀이 트리거 자리를 쓰면 다른 버튼 자리에 두고 게임별 설정에서 "xinput_button TRIGGER_LEFT/RIGHT"(끝까지 당김)로 누른다.
     /// </summary>
-    private static bool Fits(MappingBinding b, string element) => b.Source.Kind == PhysicalInputKind.Axis
-        ? FreeStickElements.Contains(element) || FreeTriggerElements.Contains(element)
-        : ButtonSlot(element) != null && (!FreeTriggerElements.Contains(element) || XboxOutputInfo.KindOf(b.Target) == XboxOutputKind.Trigger);
+    private static bool Fits(MappingBinding b, string element) =>
+        IsAxisToButton(b) ? ButtonSlot(element) != null && !FreeTriggerElements.Contains(element)
+        : b.Source.Kind == PhysicalInputKind.Axis
+            ? FreeStickElements.Contains(element) || FreeTriggerElements.Contains(element)
+            : ButtonSlot(element) != null && (!FreeTriggerElements.Contains(element) || XboxOutputInfo.KindOf(b.Target) == XboxOutputKind.Trigger);
 
     // ---- 요소 ↔ 게임별 소스 ----
 
@@ -312,26 +325,15 @@ public static class SteamLayoutPlanner
                     break;
                 }
 
-                // 축 한쪽 방향 → 버튼: 장치 레이아웃에서 스틱 축 자리에 있는 축을, 게임별 설정에서 그 스틱을 방향 패드 모드로 바꿔 표현
+                // 축 한쪽 방향 → 버튼: 장치 설정에서 같은 방향 반쪽 축이 들어간 버튼 자리("leftshoulder:-a2")
                 if (kind == XboxOutputKind.Button && b.Source.IsHalfAxis)
                 {
-                    if (src.Type != 'a' || src.HalfSign != null || StickAxis(element) is not { } dstick) continue;
+                    if (src.Type != 'a' || src.HalfSign != (b.Source.AxisSign < 0 ? '-' : '+')) continue;
+                    if (ButtonSlot(element) is not { } hslot || TriggerSource(element) != null) continue;
                     var xinputName = XInputName(b.Target);
                     if (xinputName == null) continue;
-                    if (plan.StickOutputs.ContainsKey(dstick.Source))
-                    {
-                        reasons.Add(b.Source.DisplayName + T($": 같은 스틱 자리({element})를 스틱 출력으로도 쓰고 있어 버튼으로 바꿀 수 없습니다", $": the same stick slot ({element}) is also a stick output, so it cannot become buttons"));
-                        return null;
-                    }
-                    // 장치 레이아웃에서 반전된 축이면 Steam이 보는 방향도 반대
-                    var steamSign = b.Source.AxisSign!.Value * (src.Inverted ? -1 : 1);
-                    var dpadInput = dstick.Component == 'x'
-                        ? (steamSign < 0 ? "dpad_west" : "dpad_east")
-                        : (steamSign < 0 ? "dpad_north" : "dpad_south"); // SDL Y는 아래가 +
-                    var dslot = (dstick.Source, dpadInput);
-                    if (plan.ButtonBindings.TryGetValue(dslot, out var prevX) && prevX != xinputName) continue;
-                    plan.ButtonBindings[dslot] = xinputName;
-                    plan.DpadStickDeadZones[dstick.Source] = Math.Max(plan.DpadStickDeadZones.GetValueOrDefault(dstick.Source), b.DeadZone);
+                    if (plan.ButtonBindings.TryGetValue(hslot, out var prevX) && prevX != xinputName) continue;
+                    plan.ButtonBindings[hslot] = xinputName;
                     usedElements.Add(element);
                     ok = true;
                     break;

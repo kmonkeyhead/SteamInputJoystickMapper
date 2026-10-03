@@ -52,6 +52,19 @@ public static class SteamConfigValidator
                            $"{axis.Key.DisplayName}: axis inversion must be the same in every game, because all games share one device layout (inverted: {inverted})."));
         }
 
+        // 축 한쪽 방향 → 버튼은 장치 설정에 반쪽 축("-a2")으로 들어간다. Steam은 한 축을 축 전체와 반쪽으로 함께 쓰면
+        // 한쪽을 무시하므로(쓰로틀에서 확인), 같은 축을 다른 곳(어느 게임이든)에서 축 전체로 쓰면 안 된다.
+        var all = profile.Games.SelectMany(g => g.Bindings.Select(b => (Game: g, Binding: b))).ToList();
+        foreach (var axis in all.Where(x => SteamLayoutPlanner.IsAxisToButton(x.Binding)).Select(x => x.Binding.Source.Axis!.Value).Distinct())
+        {
+            var whole = all.Where(x => x.Binding.Source.Kind == PhysicalInputKind.Axis && x.Binding.Source.Axis == axis
+                                       && !x.Binding.Source.IsHalfAxis).Select(x => x.Game.GameName).Distinct().ToList();
+            if (whole.Count == 0) continue;
+            var axisName = PhysicalInput.AxisDisplayName(axis);
+            r.Errors.Add(T($"{axisName}: 버튼으로 쓰는 축은 스틱으로 함께 쓸 수 없습니다 (스틱으로 씀: {string.Join(", ", whole)}).",
+                           $"{axisName}: an axis used as buttons can't also be used as a stick (used as a stick in: {string.Join(", ", whole)})."));
+        }
+
         // 쓰로틀(방향 있는 축 → LT/RT)은 특수 처리: 장치 설정은 모든 게임이 공유하므로 [Steam에 적용] 때 쓰로틀을 쓸 게임
         // 하나를 고른다(나머지 게임의 쓰로틀 매핑은 적용되지 않음). 한 게임 안에서 매핑 1개면 0~100%, 2개(−/+)면 0~50 / 50~100.
         foreach (var game in profile.Games)
