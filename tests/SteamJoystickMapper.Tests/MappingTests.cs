@@ -18,7 +18,7 @@ internal static class Fixtures
     public static MappingProfile Ac8() => new()
     {
         ProfileName = "AC8_TA320", AppId = "1234560", GameName = "Ace Combat 8", Device = TA320,
-        Bindings = Presets.AceCombatFlightStick(TA320),
+        Bindings = Presets.BasicFlightStick(TA320),
     };
 
     public static PerGamePlan PlanOnOwnLayout(MappingProfile p) =>

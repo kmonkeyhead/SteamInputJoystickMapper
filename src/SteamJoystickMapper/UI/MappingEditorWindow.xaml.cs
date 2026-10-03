@@ -285,12 +285,21 @@ public partial class MappingEditorWindow : Window
 
     private void ApplyBindings(IEnumerable<MappingBinding> bindings)
     {
+        var filled = new HashSet<BindingRow>();
         foreach (var b in bindings)
         {
-            var row = _rows.FirstOrDefault(r => r.IsEditable && r.Target == b.Target);
-            if (row == null) continue;
+            // 같은 출력에 입력이 여러 개면(예: 버튼 14·17 → LT) 이번에 채운 줄 다음에 줄을 더 만든다
+            var sameTarget = _rows.Where(r => r.IsEditable && r.Target == b.Target).ToList();
+            if (sameTarget.Count == 0) continue;
+            var row = sameTarget.FirstOrDefault(r => !filled.Contains(r));
+            if (row == null)
+            {
+                row = NewRow(b.Target);
+                _rows.Insert(_rows.IndexOf(sameTarget[^1]) + 1, row);
+            }
             foreach (var other in _rows.Where(r => r != row && r.Source == b.Source)) other.Clear();
             row.Load(b);
+            filled.Add(row);
         }
         Revalidate();
     }
@@ -298,8 +307,8 @@ public partial class MappingEditorWindow : Window
     private void Preset_Click(object sender, RoutedEventArgs e)
     {
         foreach (var r in _rows) r.Clear();
-        ApplyBindings(Presets.AceCombatFlightStick(_profile.Device));
-        DetectStatusText.Text = "프리셋 적용: Stick X/Y → 왼쪽 스틱, Twist → 오른쪽 스틱 X, 버튼 1~4 → B/A/X/Y, Hat → D-Pad";
+        ApplyBindings(Presets.AceCombat8(_profile.Device));
+        DetectStatusText.Text = "AC8 예제 적용: 스틱 → 왼쪽 스틱, 쓰로틀 → RT(0~70%), 버튼 14·17 → LT, 트위스트 → LB/RB, 버튼 8/9 → LS/RS, Hat → D-Pad";
     }
 
     private void PovToDpad_Click(object sender, RoutedEventArgs e)

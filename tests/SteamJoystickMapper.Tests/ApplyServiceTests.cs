@@ -60,7 +60,7 @@ public class ApplyServiceTests : IDisposable
     /// <summary>AC8 프리셋에서 시작해 edit으로 바꾼 게임 매핑.</summary>
     private static GameMapping Game(string appId, Action<List<MappingBinding>> edit)
     {
-        var g = new GameMapping { AppId = appId, GameName = "Game " + appId, Bindings = Presets.AceCombatFlightStick(Fixtures.TA320) };
+        var g = new GameMapping { AppId = appId, GameName = "Game " + appId, Bindings = Presets.BasicFlightStick(Fixtures.TA320) };
         edit(g.Bindings);
         return g;
     }
@@ -260,7 +260,7 @@ public class ProfileStoreTests : IDisposable
         Assert.True(created.Device.IsEmpty);
 
         created.Device = Fixtures.TA320;
-        created.Games.Add(new GameMapping { AppId = "1000", GameName = "G", Bindings = Presets.AceCombatFlightStick(Fixtures.TA320) });
+        created.Games.Add(new GameMapping { AppId = "1000", GameName = "G", Bindings = Presets.BasicFlightStick(Fixtures.TA320) });
         store.Save(created);
 
         var loaded = store.LoadOrCreate();
