@@ -77,6 +77,29 @@ public class AxisToButtonTests : IDisposable
     }
 
     [Fact]
+    public void SameNameLayoutUnderOtherFileName_IsOverwrittenToo()
+    {
+        // 이전 버전이 다른 이름(44f-405-...)으로 만든 같은 제목의 레이아웃 → "내 레이아웃"에 같은 이름이 2개.
+        // 적용하면 둘 다 같은 내용이 된다. 앱이 만들지 않은 파일(제목이 같아도)은 건드리지 않는다.
+        var p = Profile();
+        p.Games.Add(TwistBumpers());
+        _service.Execute(_service.Prepare(p));
+        var dir = Path.Combine(_configDir, "1000");
+        var main = Path.Combine(dir, "controller_generic.vdf");
+        var old = Path.Combine(dir, "44f-405-99860a.vdf");
+        File.WriteAllText(old, File.ReadAllText(main).Replace("xinput_button shoulder_left", "xinput_button A"));
+        var foreign = Path.Combine(dir, "45e-2e3-99860a.vdf");
+        File.WriteAllText(foreign, "\"controller_mappings\"\n{\n\t\"title\"\t\t\"" + p.ProfileName + "\"\n}\n");
+
+        var plan = _service.Prepare(p);
+        Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
+        Assert.Contains(plan.Notes, n => n.Contains("44f-405-99860a.vdf"));
+        _service.Execute(plan);
+        Assert.Equal(File.ReadAllText(main), File.ReadAllText(old));
+        Assert.DoesNotContain("xinput_button", File.ReadAllText(foreign));
+    }
+
+    [Fact]
     public void TwistAsStickInAnotherGame_IsRejected()
     {
         // 반쪽 축(버튼)과 축 전체(스틱)를 함께 쓰면 Steam이 한쪽을 무시하므로 오류
