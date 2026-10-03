@@ -82,10 +82,15 @@ public static class Dialogs
         var pre = games.FirstOrDefault(g => g.AppId == preselectAppId);
         combo.SelectedItem = pre ?? games.FirstOrDefault();
         if (pre != null) use.IsChecked = true; else none.IsChecked = true;
-        combo.SelectionChanged += (_, _) => use.IsChecked = true;
+        // 고른 게임의 쓰로틀이 1개인지 2개인지(0~50 / 50~100으로 나뉘는지) 보여 준다
+        var summary = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(20, 6, 0, 0) };
+        void UpdateSummary() => summary.Text = combo.SelectedItem is Mapping.GameMapping g ? Steam.SteamLayoutPlanner.ThrottleSummary(g) ?? "" : "";
+        UpdateSummary();
+        combo.SelectionChanged += (_, _) => { use.IsChecked = true; UpdateSummary(); };
         panel.Children.Add(none);
         panel.Children.Add(use);
         panel.Children.Add(combo);
+        panel.Children.Add(summary);
         panel.Children.Add(new TextBlock
         {
             TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DimGray, Margin = new Thickness(0, 10, 0, 0),

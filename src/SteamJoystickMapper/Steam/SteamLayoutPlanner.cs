@@ -155,6 +155,26 @@ public static class SteamLayoutPlanner
     /// <summary>게임 하나의 쓰로틀(방향 있는 축 → LT/RT) 매핑.</summary>
     public static IEnumerable<MappingBinding> ThrottleBindings(GameMapping game) => game.Bindings.Where(IsDirectedAxisToTrigger);
 
+    /// <summary>
+    /// 게임의 쓰로틀 매핑 개수와 안내 (없으면 null).
+    /// 1개: 쓰로틀 전체를 쓰고 범위는 0~100% 안에서 자유. 2개: 가운데에서 나뉘어 − 0~50%, + 50~100%.
+    /// </summary>
+    public static string? ThrottleSummary(GameMapping game)
+    {
+        var t = ThrottleBindings(game).ToList();
+        if (t.Count == 0) return null;
+        var list = string.Join(", ", t.Select(b =>
+        {
+            var (low, high) = b.TriggerRange();
+            return $"{b.Source.DisplayName} → {XboxOutputInfo.DisplayName(b.Target)} {low}~{high}%";
+        }));
+        return t.Count == 1
+            ? T($"쓰로틀 1개 ({list}): 쓰로틀 전체를 쓰며 범위는 0~100% 안에서 정할 수 있습니다.",
+                $"1 throttle mapping ({list}): uses the whole throttle; the range can be anywhere in 0~100%.")
+            : T($"쓰로틀 {t.Count}개 ({list}): 쓰로틀이 가운데에서 나뉘어 − 는 0~50%, + 는 50~100% 안에서만 동작합니다.",
+                $"{t.Count} throttle mappings ({list}): the throttle is split in the middle — − works only within 0~50%, + only within 50~100%.");
+    }
+
     /// <summary>반으로 나눠 쓰는 축: 한 게임에서 같은 축을 쓰로틀 매핑 2개(−/+)에 쓴 축.</summary>
     public static HashSet<JoyAxis> SplitAxes(MapperProfile profile) =>
         profile.Games

@@ -73,7 +73,8 @@ public static class SteamConfigValidator
             if (throttle.Count == 0) continue;
             r.Warnings.Add($"[{game.GameName}] " + ThrottleWarningMarker + T(
                 ": 장치 설정을 모든 게임이 같이 쓰므로, [Steam에 적용]할 때 쓰로틀을 쓸 게임 하나를 고릅니다 (다른 게임의 쓰로틀 매핑은 그때 적용되지 않음).",
-                ": all games share one device layout, so you pick one game to use the throttle when you click [Apply to Steam] (other games' throttle mappings are not applied then)."));
+                ": all games share one device layout, so you pick one game to use the throttle when you click [Apply to Steam] (other games' throttle mappings are not applied then).")
+                + "\n   " + SteamLayoutPlanner.ThrottleSummary(game));
             foreach (var axis in throttle.GroupBy(b => b.Source.Axis!.Value).Where(x => x.Count() >= 2))
             {
                 var axisName = PhysicalInput.AxisDisplayName(axis.Key);

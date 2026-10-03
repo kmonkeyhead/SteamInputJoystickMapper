@@ -113,8 +113,9 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
         };
         var throttleGame = original.FindGame(throttleAppId ?? "");
         var ignored = ThrottleGames(original).Where(g => g.AppId != throttleAppId).Select(g => g.GameName).ToList();
-        if (throttleGame != null) plan.Notes.Add(T($"쓰로틀: {throttleGame.GameName}의 쓰로틀 설정을 사용합니다.",
-                                                   $"Throttle: using the throttle mapping of {throttleGame.GameName}."));
+        if (throttleGame != null) plan.Notes.Add(T($"쓰로틀: {throttleGame.GameName}의 쓰로틀 설정을 사용합니다 — ",
+                                                   $"Throttle: using the throttle mapping of {throttleGame.GameName} — ")
+                                                 + SteamLayoutPlanner.ThrottleSummary(throttleGame));
         if (ignored.Count > 0) plan.Notes.Add(T($"쓰로틀: 다음 게임의 쓰로틀 매핑은 적용하지 않습니다 — {string.Join(", ", ignored)}",
                                                 $"Throttle: these games' throttle mappings are not applied — {string.Join(", ", ignored)}"));
         if (layoutChanged && globalRoot != null)

@@ -346,7 +346,26 @@ public class ThrottleToTriggersTests : IDisposable
             AppId = "1000", GameName = "G",
             Bindings = { new() { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, +1), RangeLow = 60, RangeHigh = 100 } },
         });
-        Assert.Contains(SteamConfigValidator.ValidateMapper(p).Warnings, w => w.Contains("쓰로틀은 특수 처리"));
+        Assert.Contains(SteamConfigValidator.ValidateMapper(p).Warnings, w => w.Contains("쓰로틀은 특수 처리") && w.Contains("쓰로틀 1개"));
+    }
+
+    [Fact]
+    public void ThrottleSummary_TellsOneOrTwo()
+    {
+        var none = new GameMapping { AppId = "1", GameName = "N", Bindings = Presets.BasicFlightStick(Fixtures.TA320) };
+        var two = new GameMapping
+        {
+            AppId = "2", GameName = "T", Bindings =
+            {
+                new() { Target = XboxOutput.LT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, -1), RangeLow = 0, RangeHigh = 40 },
+                new() { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, +1), RangeLow = 60, RangeHigh = 100 },
+            },
+        };
+        Assert.Null(SteamLayoutPlanner.ThrottleSummary(none));
+        var s = SteamLayoutPlanner.ThrottleSummary(two)!;
+        Assert.Contains("쓰로틀 2개", s);
+        Assert.Contains("0~50%", s);
+        Assert.Contains("50~100%", s);
     }
 
     [Fact]
