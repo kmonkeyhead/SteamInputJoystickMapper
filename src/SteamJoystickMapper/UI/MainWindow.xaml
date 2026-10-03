@@ -33,7 +33,7 @@
                         Margin="0" Padding="12,3" FontWeight="SemiBold" Foreground="White" Background="#E0533D" BorderBrush="#C9432F"/>
             </StackPanel>
             <StackPanel>
-                <TextBlock x:Name="SteamInfoText" Foreground="Gray" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                <TextBlock x:Name="SteamInfoText" Foreground="#C0392B" Visibility="Collapsed" VerticalAlignment="Center" TextWrapping="Wrap"/>
             </StackPanel>
         </DockPanel>
 

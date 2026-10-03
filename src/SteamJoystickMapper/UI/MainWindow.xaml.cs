@@ -76,10 +76,12 @@ public partial class MainWindow : Window
         RefreshAll();
     }
 
-    private void RefreshSteamInfo() =>
-        SteamInfoText.Text = _env == null
-            ? T("Steam을 찾을 수 없습니다. Steam 설치 후 다시 실행하세요.", "Steam was not found. Install Steam and start again.")
-            : $"Steam: {_env.SteamPath}    {T("사용자", "User")}: {(_env.User?.ToString() ?? T("없음", "none"))}";
+    /// <summary>Steam을 못 찾았을 때만 안내를 보인다 (경로/사용자는 표시하지 않음).</summary>
+    private void RefreshSteamInfo()
+    {
+        SteamInfoText.Text = T("Steam을 찾을 수 없습니다. Steam 설치 후 다시 실행하세요.", "Steam was not found. Install Steam and start again.");
+        SteamInfoText.Visibility = _env == null && IsLoaded ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     private void SaveProfile()
     {
