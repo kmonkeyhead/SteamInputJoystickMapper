@@ -8,11 +8,20 @@ namespace SteamJoystickMapper.Logging;
 /// </summary>
 public static class AppLog
 {
+    public const int RecentLineLimit = 2000;
     private static readonly object FileLock = new();
     private static readonly ConcurrentDictionary<string, byte> Secrets = new();
+    private static readonly Queue<string> RecentLines = new();
     private static string? _logFile;
 
     public static event Action<string>? LineAdded;
+
+    public static string? CurrentFilePath => _logFile;
+
+    public static string[] GetRecentLines()
+    {
+        lock (FileLock) return RecentLines.ToArray();
+    }
 
     public static void Initialize(string logDirectory)
     {
@@ -40,16 +49,18 @@ public static class AppLog
 
     private static void Write(string level, string message)
     {
-        var line = $"[{DateTime.Now:HH:mm:ss}] {level}{Sanitize(message)}";
-        if (_logFile != null)
+        var line = $"[{DateTime.Now:HH:mm:ss.fff}] {level}{Sanitize(message)}";
+        lock (FileLock)
         {
-            try
+            RecentLines.Enqueue(line);
+            while (RecentLines.Count > RecentLineLimit) RecentLines.Dequeue();
+            if (_logFile != null)
             {
-                lock (FileLock) File.AppendAllText(_logFile, line + Environment.NewLine);
-            }
-            catch (IOException)
-            {
-                // 로그 파일 기록 실패는 앱 동작에 영향을 주지 않는다.
+                try { File.AppendAllText(_logFile, line + Environment.NewLine); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // 파일 기록에 실패해도 화면 로그와 앱 동작은 유지한다.
+                }
             }
         }
         LineAdded?.Invoke(line);

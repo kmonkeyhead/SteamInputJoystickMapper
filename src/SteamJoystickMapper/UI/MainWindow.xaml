@@ -21,10 +21,21 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <DockPanel Grid.Row="0">
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="만든이 : 몽키해드"/>
+            <TextBlock TextWrapping="Wrap" Margin="0,3,0,0">
+                <Run Text="{Binding [main.website], Source={x:Static loc:Loc.Instance}, Mode=OneWay}"/>
+                <Hyperlink NavigateUri="https://github.com/kmonkeyhead/SteamInputJoystickMapper" RequestNavigate="Repository_RequestNavigate">
+                    <Run Text="https://github.com/kmonkeyhead/SteamInputJoystickMapper"/>
+                </Hyperlink>
+            </TextBlock>
+        </StackPanel>
+
+        <DockPanel Grid.Row="1">
             <!-- 오른쪽 위: 언어 선택 + 후원하기 -->
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
                 <ToggleButton x:Name="LangKoButton" Content="한국어" Style="{StaticResource LangButton}" Checked="LangKo_Checked" Unchecked="Lang_Unchecked"/>
@@ -33,11 +44,13 @@
                         Margin="0" Padding="12,3" FontWeight="SemiBold" Foreground="White" Background="#E0533D" BorderBrush="#C9432F"/>
             </StackPanel>
             <StackPanel>
+                <TextBlock Text="{Binding [main.releaseInfo], Source={x:Static loc:Loc.Instance}}" Foreground="DimGray" FontSize="12"
+                           Margin="0,4,0,0" TextWrapping="Wrap"/>
                 <TextBlock x:Name="SteamInfoText" Foreground="#C0392B" Visibility="Collapsed" VerticalAlignment="Center" TextWrapping="Wrap"/>
             </StackPanel>
         </DockPanel>
 
-        <StackPanel Grid.Row="1">
+        <StackPanel Grid.Row="2">
             <!-- 프로필 (하나뿐) -->
             <TextBlock Text="{Binding [main.profile], Source={x:Static loc:Loc.Instance}}" Style="{StaticResource SectionTitle}"/>
             <DockPanel>
@@ -100,7 +113,7 @@
         </StackPanel>
 
         <!-- 로그 -->
-        <DockPanel Grid.Row="2" Margin="0,14,0,0">
+        <DockPanel Grid.Row="3" Margin="0,14,0,0">
             <TextBlock DockPanel.Dock="Top" Text="{Binding [main.log], Source={x:Static loc:Loc.Instance}}" Style="{StaticResource SectionTitle}"/>
             <ListBox x:Name="LogList" FontFamily="Consolas" FontSize="12"/>
         </DockPanel>

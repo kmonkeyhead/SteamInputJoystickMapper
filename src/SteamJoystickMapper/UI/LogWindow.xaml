@@ -1,0 +1,23 @@
+<Window x:Class="SteamJoystickMapper.UI.LogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:SteamJoystickMapper.Localization"
+        Title="{Binding [log.title], Source={x:Static loc:Loc.Instance}}"
+        Width="980" Height="600" MinWidth="650" MinHeight="350"
+        WindowStartupLocation="CenterOwner" FontSize="13">
+    <DockPanel Margin="14">
+        <StackPanel DockPanel.Dock="Top">
+            <TextBlock Text="{Binding [log.hint], Source={x:Static loc:Loc.Instance}}" TextWrapping="Wrap"/>
+            <TextBlock x:Name="FilePathText" Foreground="DimGray" TextWrapping="Wrap" Margin="0,5,0,10"/>
+        </StackPanel>
+        <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+            <Button Content="{Binding [log.copy], Source={x:Static loc:Loc.Instance}}" Click="Copy_Click"/>
+            <Button Content="{Binding [log.save], Source={x:Static loc:Loc.Instance}}" Click="Save_Click"/>
+            <Button Content="{Binding [log.clear], Source={x:Static loc:Loc.Instance}}" Click="Clear_Click"/>
+            <CheckBox x:Name="AutoScrollBox" Content="{Binding [log.autoScroll], Source={x:Static loc:Loc.Instance}}"
+                      IsChecked="True" VerticalAlignment="Center" Margin="8,0,0,0"/>
+        </WrapPanel>
+        <ListBox x:Name="LogList" FontFamily="Consolas" FontSize="12"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+    </DockPanel>
+</Window>

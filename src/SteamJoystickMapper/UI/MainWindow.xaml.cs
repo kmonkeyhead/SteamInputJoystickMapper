@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     private List<SteamGame> _allGames = new();
     private IReadOnlyList<DeviceInfo> _devices = Array.Empty<DeviceInfo>();
     private bool _busy;
+    private bool _closed;
     /// <summary>이번 실행에서 마지막으로 매핑을 편집한 게임 (쓰로틀 선택의 기본값으로 먼저 보여 줌).</summary>
     private string? _lastEditedAppId;
 
@@ -38,11 +39,8 @@ public partial class MainWindow : Window
         Loc.Init(_settings.Language);
         InitializeComponent();
         _profile = _store.LoadOrCreate();
-        AppLog.LineAdded += line => Dispatcher.BeginInvoke(() =>
-        {
-            LogList.Items.Add(line);
-            LogList.ScrollIntoView(line);
-        });
+        foreach (var line in AppLog.GetRecentLines()) AddLogLine(line);
+        AppLog.LineAdded += OnLogLineAdded;
         Loc.Changed += () =>
         {
             UpdateLanguageButtons();
@@ -52,6 +50,11 @@ public partial class MainWindow : Window
         UpdateLanguageButtons();
         Loaded += (_, _) => Initialize();
         Closing += (_, _) => _settings.Save();
+        Closed += (_, _) =>
+        {
+            _closed = true;
+            AppLog.LineAdded -= OnLogLineAdded;
+        };
     }
 
     private SteamGame? SelectedTarget => GameCombo.SelectedItem as SteamGame;
@@ -74,6 +77,19 @@ public partial class MainWindow : Window
         GameCombo.ItemsSource = _allGames;
         GameCombo.SelectedItem = _allGames.FirstOrDefault(g => g.AppId == lastAppId) ?? _allGames.FirstOrDefault();
         RefreshAll();
+    }
+
+    private void OnLogLineAdded(string line)
+    {
+        if (_closed || Dispatcher.HasShutdownStarted) return;
+        Dispatcher.BeginInvoke(() => { if (!_closed) AddLogLine(line); });
+    }
+
+    private void AddLogLine(string line)
+    {
+        LogList.Items.Add(line);
+        while (LogList.Items.Count > AppLog.RecentLineLimit) LogList.Items.RemoveAt(0);
+        LogList.ScrollIntoView(line);
     }
 
     /// <summary>Steam을 못 찾았을 때만 안내를 보인다 (경로/사용자는 표시하지 않음).</summary>
@@ -130,6 +146,12 @@ public partial class MainWindow : Window
     {
         try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
         catch (Exception ex) { AppLog.Warn($"{T("링크를 열 수 없습니다", "Could not open link")}: {ex.Message}"); }
+    }
+
+    private void Repository_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+    {
+        OpenUrl(e.Uri.AbsoluteUri);
+        e.Handled = true;
     }
 
     // ---------------- 프로필 ----------------

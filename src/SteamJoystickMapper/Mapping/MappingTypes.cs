@@ -46,6 +46,8 @@ public static class XboxOutputInfo
         XboxOutput.LeftStickY => "Left Stick Y",
         XboxOutput.RightStickX => "Right Stick X",
         XboxOutput.RightStickY => "Right Stick Y",
+        XboxOutput.LS => "Left Stick Click",
+        XboxOutput.RS => "Right Stick Click",
         XboxOutput.DPadUp => "D-Pad Up",
         XboxOutput.DPadDown => "D-Pad Down",
         XboxOutput.DPadLeft => "D-Pad Left",

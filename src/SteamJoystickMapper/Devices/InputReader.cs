@@ -11,25 +11,35 @@ public sealed class InputReader : IDisposable
     private readonly IDirectInputDevice8 _device;
     private readonly DeviceInfo _info;
 
-    public InputReader(DeviceInfo info, IntPtr windowHandle)
+    public InputReader(DeviceInfo info, IntPtr windowHandle, Action<string>? warning = null)
     {
         _info = info;
         _di = DInput.DirectInput8Create();
-        _device = _di.CreateDevice(info.InstanceGuid);
-        _device.SetCooperativeLevel(windowHandle, CooperativeLevel.NonExclusive | CooperativeLevel.Background);
-        _device.SetDataFormat<RawJoystickState>();
-        foreach (var obj in _device.GetObjects(DeviceObjectTypeFlags.Axis))
+        IDirectInputDevice8? openedDevice = null;
+        try
         {
-            try
+            _device = openedDevice = _di.CreateDevice(info.InstanceGuid);
+            _device.SetCooperativeLevel(windowHandle, CooperativeLevel.NonExclusive | CooperativeLevel.Background);
+            _device.SetDataFormat<RawJoystickState>();
+            foreach (var obj in _device.GetObjects(DeviceObjectTypeFlags.Axis))
             {
-                _device.GetObjectPropertiesById(obj.ObjectId).Range = new InputRange(-32768, 32767);
+                try
+                {
+                    _device.GetObjectPropertiesById(obj.ObjectId).Range = new InputRange(-32768, 32767);
+                }
+                catch (Exception ex)
+                {
+                    (warning ?? AppLog.Warn)($"축 범위 설정 실패 ({obj.Name}): {ex.Message}");
+                }
             }
-            catch (Exception ex)
-            {
-                AppLog.Warn($"축 범위 설정 실패 ({obj.Name}): {ex.Message}");
-            }
+            _device.Acquire();
         }
-        _device.Acquire();
+        catch
+        {
+            openedDevice?.Dispose();
+            _di.Dispose();
+            throw;
+        }
     }
 
     public InputSnapshot? Poll()

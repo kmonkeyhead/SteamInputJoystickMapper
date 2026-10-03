@@ -29,6 +29,7 @@
             <Button Content="{Binding [editor.preset], Source={x:Static loc:Loc.Instance}}" Click="Preset_Click" ToolTip="{Binding [editor.presetTip], Source={x:Static loc:Loc.Instance}}"/>
             <Button Content="POV → D-Pad" Click="PovToDpad_Click"/>
             <Button Content="{Binding [editor.clearAll], Source={x:Static loc:Loc.Instance}}" Click="ClearAll_Click"/>
+            <Button x:Name="ViewLogButton" Content="{Binding [editor.viewLog], Source={x:Static loc:Loc.Instance}}" Click="ViewLog_Click"/>
             <TextBlock x:Name="DetectStatusText" VerticalAlignment="Center" Margin="12,0,0,0" FontWeight="SemiBold" Foreground="DarkOrange"/>
         </WrapPanel>
 

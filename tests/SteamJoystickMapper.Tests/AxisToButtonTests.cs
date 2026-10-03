@@ -450,20 +450,33 @@ public class AceCombat8PresetTests
     public void Preset_MatchesUserMapping_AndIsValid()
     {
         var bindings = Presets.AceCombat8(Fixtures.TA320);
-        Assert.Equal(2, bindings.Count(b => b.Target == XboxOutput.LT && b.Source.Kind == PhysicalInputKind.Button)); // 버튼 14·17
+        Assert.Equal(16, bindings.Count);
+        Assert.Equal(PhysicalInput.FromButton(0), bindings.Single(b => b.Target == XboxOutput.A).Source);
+        Assert.Equal(PhysicalInput.FromButton(2), bindings.Single(b => b.Target == XboxOutput.B).Source);
+        Assert.Equal(PhysicalInput.FromButton(1), bindings.Single(b => b.Target == XboxOutput.X).Source);
+        Assert.Equal(PhysicalInput.FromButton(3), bindings.Single(b => b.Target == XboxOutput.Y).Source);
+        Assert.Equal(PhysicalInput.FromButton(16), bindings.Single(b => b.Target == XboxOutput.LT).Source); // 버튼 17
         var rt = bindings.Single(b => b.Target == XboxOutput.RT);
         Assert.Equal(PhysicalInput.FromAxisHalf(JoyAxis.Slider0, -1), rt.Source);
         Assert.Equal((0, 70), rt.TriggerRange());
-        Assert.Equal(60, bindings.Single(b => b.Target == XboxOutput.LB).DeadZone);
-        Assert.Equal(PhysicalInput.FromButton(7), bindings.Single(b => b.Target == XboxOutput.LS).Source);
+        Assert.Equal(PhysicalInput.FromAxisHalf(JoyAxis.Rz, -1), bindings.Single(b => b.Target == XboxOutput.LB).Source);
+        Assert.Equal(PhysicalInput.FromAxisHalf(JoyAxis.Rz, +1), bindings.Single(b => b.Target == XboxOutput.RB).Source);
+        Assert.Equal(0, bindings.Single(b => b.Target == XboxOutput.LB).DeadZone);
+        Assert.Equal(0, bindings.Single(b => b.Target == XboxOutput.RB).DeadZone);
+        Assert.Equal(PhysicalInput.FromButton(14), bindings.Single(b => b.Target == XboxOutput.LS).Source);
+        Assert.Equal(PhysicalInput.FromButton(13), bindings.Single(b => b.Target == XboxOutput.RS).Source);
 
         var p = MapperProfile.CreateDefault(Fixtures.TA320);
         p.Games.Add(new GameMapping { AppId = "2288340", GameName = "ACE COMBAT 8", Bindings = bindings });
         var v = SteamConfigValidator.ValidateMapper(p);
         Assert.True(v.IsValid, string.Join("\n", v.Errors));
-        // 쓰로틀 게임으로 고르면: 쓰로틀 매핑 1개(−)라 축 전체 뒤집어서 RT, 버튼 14가 LT 자리
+        // 쓰로틀 게임으로 고르면: 쓰로틀 매핑 1개(−)라 축 전체 뒤집어서 RT, 버튼 17이 LT 자리
         var layout = SteamLayoutPlanner.BuildLayout(SteamJoystickMapper.Steam.SteamApplyService.WithThrottleFrom(p, "2288340"), null);
+        Assert.Equal("b0", layout.Get("a"));
+        Assert.Equal("b2", layout.Get("b"));
+        Assert.Equal("b1", layout.Get("x"));
+        Assert.Equal("b3", layout.Get("y"));
         Assert.Equal("a3~", layout.Get("righttrigger"));
-        Assert.Equal("b13", layout.Get("lefttrigger"));
+        Assert.Equal("b16", layout.Get("lefttrigger"));
     }
 }

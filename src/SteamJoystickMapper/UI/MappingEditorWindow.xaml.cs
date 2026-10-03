@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -7,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using SteamJoystickMapper.Config;
 using SteamJoystickMapper.Devices;
 using SteamJoystickMapper.Logging;
 using SteamJoystickMapper.Mapping;
@@ -36,6 +38,11 @@ public partial class MappingEditorWindow : Window
     private InputSnapshot? _last;
     private BindingRow? _detectRow;
     private DateTime _detectStarted;
+    private LogWindow? _logWindow;
+    private readonly MappingInputLog _inputLog = new(AppPaths.Logs);
+    private readonly InputChangeTracker _inputChanges = new();
+    private readonly Stopwatch _inputClock = Stopwatch.StartNew();
+    private bool _inputAvailable = true;
 
     private readonly MapperProfile _profile;
     private readonly GameMapping _game;
@@ -49,6 +56,7 @@ public partial class MappingEditorWindow : Window
         _profile = profile;
         _game = game;
         _device = device;
+        _inputLog.Info($"MAPPING {game.GameName} ({game.AppId}); device={profile.Device.Name} [{profile.Device.Vid}:{profile.Device.Pid}]");
 
         Title = $"{T("매핑 편집", "Edit mapping")} - {game.GameName}";
         ModeText.Text = $"{game.GameName} ({game.AppId})";
@@ -89,12 +97,28 @@ public partial class MappingEditorWindow : Window
         ButtonMonitor.ItemsSource = _buttonItems;
 
         SourceInitialized += (_, _) => StartReader();
-        Closed += (_, _) => { _timer.Stop(); _reader?.Dispose(); };
+        Closed += (_, _) =>
+        {
+            _timer.Stop();
+            _reader?.Dispose();
+            _inputLog.Info("Input recording stopped (mapping editor closed)");
+            _inputLog.Dispose();
+        };
         _timer.Tick += (_, _) => Tick();
         // 범위 칸에서 벗어나면 쓰로틀 2개 구간(0~50 / 50~100)에 맞춘다
         AddHandler(LostKeyboardFocusEvent, new KeyboardFocusChangedEventHandler((_, _) => Revalidate()), true);
         Revalidate();
     }
+
+    private void ViewLog_Click(object sender, RoutedEventArgs e)
+    {
+        if (_logWindow != null) { _logWindow.Activate(); return; }
+        _logWindow = new LogWindow(_inputLog) { Owner = this };
+        _logWindow.Closed += (_, _) => _logWindow = null;
+        // 편집 창에 속한 별도 창으로 열어 입력 감지와 로그 확인을 동시에 할 수 있다.
+        _logWindow.Show();
+    }
+
     private BindingRow NewRow(XboxOutput target)
     {
         var row = new BindingRow(target);
@@ -124,20 +148,22 @@ public partial class MappingEditorWindow : Window
         if (_device == null)
         {
             MonitorStatusText.Text = T("프로필의 장치가 연결되어 있지 않습니다. 입력 감지와 모니터를 사용할 수 없습니다.", "The profile device is not connected. Detection and the monitor are unavailable.");
+            _inputLog.Warn("No device connected; input detection and recording unavailable");
             return;
         }
         try
         {
-            _reader = new InputReader(_device, new WindowInteropHelper(this).Handle);
+            _reader = new InputReader(_device, new WindowInteropHelper(this).Handle, _inputLog.Warn);
             foreach (var axis in _device.Axes) _axisItems.Add(new AxisMonitorItem(axis));
             for (var i = 0; i < _device.ButtonCount; i++) _buttonItems.Add(new ButtonMonitorItem(i));
             MonitorStatusText.Text = _device.Display;
+            _inputLog.Info($"INPUT {_device.Name} [{_device.VidHex}:{_device.PidHex}] ({_device.InstanceGuid}): recording started; axes=[{string.Join(",", _device.Axes)}]; buttons={_device.ButtonCount}; POVs={_device.PovCount}");
             _timer.Start();
         }
         catch (Exception ex)
         {
             MonitorStatusText.Text = $"{T("장치를 열 수 없습니다", "Could not open the device")}: {ex.Message}";
-            AppLog.Warn($"{T("입력 장치 열기 실패", "Failed to open input device")}: {ex.Message}");
+            _inputLog.Warn($"{T("입력 장치 열기 실패", "Failed to open input device")}: {ex.Message}");
         }
     }
 
@@ -146,9 +172,19 @@ public partial class MappingEditorWindow : Window
         var snap = _reader?.Poll();
         if (snap == null)
         {
+            if (_inputAvailable) _inputLog.Warn("INPUT device unavailable");
+            _inputAvailable = false;
             MonitorStatusText.Text = T("장치 응답 없음 (분리되었나요?)", "No response from the device (unplugged?)");
             return;
         }
+        if (!_inputAvailable)
+        {
+            _inputLog.Info("INPUT device available again");
+            _inputChanges.Reset();
+            _inputAvailable = true;
+        }
+        if (_inputChanges.Update(snap, _inputClock.Elapsed) is { } change)
+            _inputLog.Info("INPUT " + change);
         _last = snap;
 
         foreach (var item in _axisItems) item.Update(snap.Axes.GetValueOrDefault(item.Axis));
@@ -173,6 +209,7 @@ public partial class MappingEditorWindow : Window
         row.IsDetecting = true;
         _detector.Reset(_last);
         _detectStarted = DateTime.Now;
+        _inputLog.Info($"DETECT {row.Target}: waiting for input");
         DetectStatusText.Text = XboxOutputInfo.KindOf(row.Target) == XboxOutputKind.Trigger
             ? $"{row.TargetText}: " + T("쓰로틀을 쓸 방향으로 움직이세요 (0%쪽 → 0~40%, 100%쪽 → 60~100%). 버튼을 눌러도 됩니다.", "move the throttle the way you want (toward 0% → 0–40%, toward 100% → 60–100%), or press a button.")
             : $"{row.TargetText}: {T("입력을 기다리는 중...", "waiting for input...")}";
@@ -239,6 +276,7 @@ public partial class MappingEditorWindow : Window
         // 같은 물리 입력이 다른 출력에 이미 연결되어 있으면 옮긴다
         foreach (var other in _rows.Where(r => r != row && r.Source == input)) other.Clear();
         row.SetSource(input);
+        _inputLog.Info($"ASSIGNED {input.DisplayName} -> {row.Target}");
         DetectStatusText.Text = $"{input.DisplayName} detected → {row.TargetText}";
         Revalidate();
     }
@@ -318,7 +356,7 @@ public partial class MappingEditorWindow : Window
     {
         foreach (var r in _rows) r.Clear();
         ApplyBindings(Presets.AceCombat8(_profile.Device));
-        DetectStatusText.Text = T("AC8 예제 적용: 스틱 → 왼쪽 스틱, 쓰로틀 → RT(0~70%), 버튼 14·17 → LT, 트위스트 → LB/RB, 버튼 8/9 → LS/RS, Hat → D-Pad", "AC8 example applied: stick → left stick, throttle → RT (0–70%), buttons 14·17 → LT, twist → LB/RB, buttons 8/9 → LS/RS, hat → D-pad");
+        DetectStatusText.Text = T("AC8 예제 적용: 스틱 → 왼쪽 스틱, 쓰로틀 → RT(0~70%), 버튼 17 → LT, 버튼 1/2/3/4 → A/X/B/Y, 트위스트 → LB/RB, 버튼 15 → Left Stick Click, 버튼 14 → Right Stick Click, Hat → D-Pad", "AC8 example applied: stick → left stick, throttle → RT (0–70%), button 17 → LT, buttons 1/2/3/4 → A/X/B/Y, twist → LB/RB, button 15 → Left Stick Click, button 14 → Right Stick Click, hat → D-pad");
     }
 
     private void PovToDpad_Click(object sender, RoutedEventArgs e)

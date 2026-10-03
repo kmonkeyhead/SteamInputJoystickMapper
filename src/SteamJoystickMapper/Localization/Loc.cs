@@ -42,12 +42,21 @@ public sealed class Loc : INotifyPropertyChanged
     {
         // 공통 / 메인 창
         ["donate"] = ("후원하기", "Donate"),
+        ["main.releaseInfo"] = ("버전 1.0 · 게시일 2026-10-03", "Version 1.0 · Published 2026-10-03"),
+        ["main.website"] = ("사이트 : ", "Website : "),
         ["main.profile"] = ("프로필", "Profile"),
         ["main.import"] = ("가져오기", "Import"),
         ["main.export"] = ("내보내기", "Export"),
         ["main.reset"] = ("프로필 모두 초기화", "Reset profile"),
         ["main.device"] = ("입력 장치", "Input device"),
         ["main.refresh"] = ("새로고침", "Refresh"),
+        ["log.title"] = ("매핑 입력 로그", "Mapping input log"),
+        ["log.hint"] = ("이 매핑 편집 창에서 사용하는 장치의 입력만 기록합니다. 편집 창을 닫으면 기록을 멈춥니다. 축은 전체 범위 1% 이상 변화 시 100ms 간격으로 기록하며, 버튼 누름·해제와 햇 방향 변화도 기록합니다. 화면에는 최근 2,000줄을 표시하고 [로그 파일 저장]은 이 편집 창의 기록 전체를 저장합니다.",
+            "Records only the input device used in this mapping editor. Recording stops when the editor closes. Axes are logged at 100ms intervals when they change by at least 1% of their full range; button presses/releases and hat changes are also logged. The display keeps the latest 2,000 lines; Save log file exports this editor's full recording."),
+        ["log.copy"] = ("표시 로그 복사", "Copy displayed log"),
+        ["log.save"] = ("로그 파일 저장", "Save log file"),
+        ["log.clear"] = ("화면 지우기", "Clear display"),
+        ["log.autoScroll"] = ("자동 스크롤", "Auto-scroll"),
         ["main.games"] = ("게임 (게임마다 매핑)", "Games (mapping per game)"),
         ["main.search"] = ("🔍 검색", "🔍 Search"),
         ["main.searchTip"] = ("게임 이름 또는 AppID 검색", "Search by game name or AppID"),
@@ -63,6 +72,7 @@ public sealed class Loc : INotifyPropertyChanged
         ["main.log"] = ("로그", "Log"),
 
         // 매핑 편집 창
+        ["editor.viewLog"] = ("로그 보기", "View log"),
         ["editor.preset"] = ("AC8 예제 적용", "Apply AC8 example"),
         ["editor.presetTip"] = ("T.A320 Pilot으로 맞춘 ACE COMBAT 8 매핑", "ACE COMBAT 8 mapping made for the T.A320 Pilot"),
         ["editor.clearAll"] = ("모두 지우기", "Clear all"),

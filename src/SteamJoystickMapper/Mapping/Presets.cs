@@ -4,8 +4,8 @@ public static class Presets
 {
     /// <summary>
     /// AC8 예제 (사용자가 T.A320 Pilot으로 ACE COMBAT 8에 맞춘 매핑, 2026-10-03):
-    /// 스틱 X/Y → 왼쪽 스틱, 쓰로틀 0%쪽 → RT(0~70%, 0%에서 최대), 버튼 14·17 → LT(최대),
-    /// 버튼 1/2/3/4 → B/A/X/Y, 트위스트 왼쪽/오른쪽 → LB/RB(데드존 60%), 버튼 8/9 → LS/RS, Hat → D-Pad.
+    /// 스틱 X/Y → 왼쪽 스틱, 쓰로틀 0%쪽 → RT(0~70%, 0%에서 최대), 버튼 17 → LT(최대),
+    /// 버튼 1/2/3/4 → A/X/B/Y, 트위스트 왼쪽/오른쪽 → LB/RB, 버튼 15/14 → LS/RS, Hat → D-Pad.
     /// 장치에 없는 입력은 건너뛴다.
     /// </summary>
     public static List<MappingBinding> AceCombat8(DeviceIdentity device)
@@ -29,18 +29,17 @@ public static class Presets
 
         Axis(JoyAxis.X, XboxOutput.LeftStickX, 5);
         Axis(JoyAxis.Y, XboxOutput.LeftStickY, 5);
-        Button(13, XboxOutput.LT);
         Button(16, XboxOutput.LT);
         Half(JoyAxis.Slider0, -1, XboxOutput.RT, low: 0, high: 70);
-        Button(1, XboxOutput.A);
-        Button(0, XboxOutput.B);
-        Button(2, XboxOutput.X);
+        Button(0, XboxOutput.A);
+        Button(2, XboxOutput.B);
+        Button(1, XboxOutput.X);
         Button(3, XboxOutput.Y);
         var twist = device.Axes.Contains(JoyAxis.Rz) ? JoyAxis.Rz : JoyAxis.Z;
-        Half(twist, -1, XboxOutput.LB, deadZone: 60);
-        Half(twist, +1, XboxOutput.RB, deadZone: 60);
-        Button(7, XboxOutput.LS);
-        Button(8, XboxOutput.RS);
+        Half(twist, -1, XboxOutput.LB);
+        Half(twist, +1, XboxOutput.RB);
+        Button(14, XboxOutput.LS);
+        Button(13, XboxOutput.RS);
         if (device.PovCount > 0) list.AddRange(PovToDpad(0));
         return list;
     }
