@@ -45,6 +45,22 @@ public static class SteamConfigValidator
             r.Errors.Add($"{axis.Key.DisplayName}: 축 반전은 모든 게임이 같은 장치 설정을 쓰므로 게임마다 같아야 합니다 " +
                          $"(반전: {string.Join(", ", axis.Where(x => x.Binding.Invert).Select(x => x.Game.GameName).Distinct())}).");
 
+        // 쓰로틀을 − 방향(0%에서 최대)으로 쓰면 반으로 나뉜다: − 는 0~50%, 같은 축의 + 는 50~100% 안에서만.
+        // (Steam은 한 축을 두 트리거에 쓸 때 반쪽 +/− 로만 받아들임. + 만 쓰면 축 전체라 0~100% 자유)
+        var split = SteamLayoutPlanner.SplitAxes(profile);
+        foreach (var game in profile.Games)
+        {
+            foreach (var b in game.Bindings.Where(b => SteamLayoutPlanner.IsDirectedAxisToTrigger(b) && split.Contains(b.Source.Axis!.Value)))
+            {
+                var (low, high) = b.TriggerRange();
+                var name = $"[{game.GameName}] {b.Source.DisplayName} → {XboxOutputInfo.DisplayName(b.Target)}";
+                if (b.Source.AxisSign < 0 && high > 50)
+                    r.Errors.Add($"{name}: − 방향(0%에서 최대) 범위는 0~50% 안이어야 합니다 (지금 {low}~{high}%). 쓰로틀은 가운데에서 반으로 나뉩니다.");
+                if (b.Source.AxisSign > 0 && low < 50)
+                    r.Errors.Add($"{name}: 쓰로틀을 − 방향으로도 쓰므로 + 방향(100%에서 최대) 범위는 50~100% 안이어야 합니다 (지금 {low}~{high}%).");
+            }
+        }
+
         var layout = SteamLayoutPlanner.BuildLayout(profile, null);
         foreach (var game in profile.Games)
         {
@@ -112,15 +128,7 @@ public static class SteamConfigValidator
                 var (low, high) = b.TriggerRange();
                 if (low < 0 || high > 100 || low >= high)
                     r.Errors.Add($"{name}: 감지 범위는 0~100% 안에서 시작 < 끝이어야 합니다 (지금 {low}~{high}%).");
-                // 쓰로틀은 가운데(50%)에서 반으로 나뉜다 (Steam은 한 축을 반쪽 +/− 로만 두 트리거에 나눠 쓴다)
-                else if (b.Source.AxisSign < 0 && low >= 50)
-                    r.Errors.Add($"{name}: − 방향(0%에서 최대) 범위는 50%보다 아래여야 합니다 (지금 {low}~{high}%).");
-                else if (b.Source.AxisSign > 0 && high <= 50)
-                    r.Errors.Add($"{name}: + 방향(100%에서 최대) 범위는 50%보다 위여야 합니다 (지금 {low}~{high}%).");
-                else if (b.Source.AxisSign < 0 && high > 50)
-                    r.Warnings.Add($"{name}: − 방향 범위는 50%까지만 적용됩니다 ({low}~{high}% → {low}~50%).");
-                else if (b.Source.AxisSign > 0 && low < 50)
-                    r.Warnings.Add($"{name}: + 방향 범위는 50%부터만 적용됩니다 ({low}~{high}% → 50~{high}%).");
+                // 50% 경계(반으로 나눈 쓰로틀)는 모든 게임을 봐야 알 수 있으므로 ValidateMapper에서 검사
             }
             // 축 → 버튼/트리거: 데드존(트리거 범위 시작)을 넘어야 입력됨
             else if (axisToButton || (b.Source.Kind == PhysicalInputKind.Axis && targetKind == XboxOutputKind.Trigger))

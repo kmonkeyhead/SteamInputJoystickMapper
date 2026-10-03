@@ -160,18 +160,18 @@ public class ThrottleToTriggersTests : IDisposable
     }
 
     [Fact]
-    public void ThrottleRanges_BecomeTriggerRangeStartEnd()
+    public void ThrottleOnBothTriggers_IsSplitAtCenter()
     {
-        // 사용자 예: LT − 10~20% (10%에서 최대), RT + 40~100% (100%에서 최대)
+        // 쓰로틀을 LT(−)·RT(+) 둘 다에: Steam 자체 항목과 같이 가운데에서 반쪽 축 +/− 로 나눔
+        // LT − 10~20% (10%에서 최대), RT + 60~100% (100%에서 최대)
         var p = MapperProfile.CreateDefault(Fixtures.TA320);
         var bindings = Presets.AceCombatFlightStick(Fixtures.TA320);
         bindings.Add(new MappingBinding { Target = XboxOutput.LT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, -1), RangeLow = 10, RangeHigh = 20 });
-        bindings.Add(new MappingBinding { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, +1), RangeLow = 40, RangeHigh = 100 });
+        bindings.Add(new MappingBinding { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, +1), RangeLow = 60, RangeHigh = 100 });
         p.Games.Add(new GameMapping { AppId = "1000", GameName = "G", Bindings = bindings });
 
         var plan = _service.Prepare(p);
         Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
-        // Steam 자체 항목과 같이 쓰로틀을 가운데에서 반쪽 축 +/− 로 나눔
         Assert.Equal("-a3", plan.Layout!.Get("lefttrigger"));
         Assert.Equal("+a3", plan.Layout.Get("righttrigger"));
         _service.Execute(plan);
@@ -183,13 +183,48 @@ public class ThrottleToTriggersTests : IDisposable
         // LT: 반쪽 축 값 = (50 - 쓰로틀%) * 2 → 쓰로틀 20~10% = 60~80%
         Assert.Equal((60 * 32767 / 100).ToString(), lt.GetValue("deadzone_inner_radius"));
         Assert.Equal((80 * 32767 / 100).ToString(), lt.GetValue("deadzone_outer_radius"));
-        // RT: 40~100%
-        Assert.Null(rt.GetValue("deadzone_inner_radius")); // + 40~100 → 반쪽 축이라 50~100 = 시작 0
-        Assert.Equal("32000", rt.GetValue("deadzone_outer_radius")); // 끝까지 닿으면 Steam 기본값
+        // RT: 반쪽 축 값 = (쓰로틀% - 50) * 2 → 60~100% = 20~100%, 끝은 Steam 기본값
+        Assert.Equal((20 * 32767 / 100).ToString(), rt.GetValue("deadzone_inner_radius"));
+        Assert.Equal("32000", rt.GetValue("deadzone_outer_radius"));
         // Steam 기본 트리거 설정과 같이 "끝까지 당기기"도 같은 트리거
         string? Click(string source) => Group(source).Find("inputs", "click", "activators", "Full_Press", "bindings")?.GetValue("binding");
         Assert.Equal("xinput_button TRIGGER_LEFT", Click("left_trigger"));
         Assert.Equal("xinput_button TRIGGER_RIGHT", Click("right_trigger"));
+    }
+
+    [Fact]
+    public void ThrottleOnOneTriggerPlus_UsesWholeAxis_AnyRange()
+    {
+        // 쓰로틀을 + 로만 (RT 40~100%): 축 전체 "a3" (확인된 형식), 범위 제한 없음
+        var p = MapperProfile.CreateDefault(Fixtures.TA320);
+        var bindings = Presets.AceCombatFlightStick(Fixtures.TA320);
+        bindings.Add(new MappingBinding { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, +1), RangeLow = 40, RangeHigh = 100 });
+        p.Games.Add(new GameMapping { AppId = "1000", GameName = "G", Bindings = bindings });
+        var plan = _service.Prepare(p);
+        Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
+        Assert.Equal("a3", plan.Layout!.Get("righttrigger"));
+        _service.Execute(plan);
+        var rt = Group("right_trigger").Find("settings")!;
+        Assert.Equal((40 * 32767 / 100).ToString(), rt.GetValue("deadzone_inner_radius"));
+        Assert.Equal("32000", rt.GetValue("deadzone_outer_radius"));
+    }
+
+    [Fact]
+    public void SplitThrottle_RangesOutsideHalves_AreRejected()
+    {
+        // 쓰로틀을 − 로도 쓰면 반으로 나뉘므로 − 0~60, + 40~100 은 오류
+        var p = MapperProfile.CreateDefault(Fixtures.TA320);
+        p.Games.Add(new GameMapping
+        {
+            AppId = "1000", GameName = "G", Bindings =
+            {
+                new() { Target = XboxOutput.LT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, -1), RangeLow = 0, RangeHigh = 60 },
+                new() { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, +1), RangeLow = 40, RangeHigh = 100 },
+            },
+        });
+        var v = SteamConfigValidator.ValidateMapper(p);
+        Assert.Contains(v.Errors, e => e.Contains("0~50% 안"));
+        Assert.Contains(v.Errors, e => e.Contains("50~100% 안"));
     }
 
     [Fact]
@@ -200,19 +235,6 @@ public class ThrottleToTriggersTests : IDisposable
         var rt = new MappingBinding { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, +1), DeadZone = 20 };
         Assert.Equal((0, 40), lt.TriggerRange());
         Assert.Equal((60, 100), rt.TriggerRange());
-    }
-
-    [Fact]
-    public void MinusRangeOver50_IsClampedWithWarning()
-    {
-        // 사용자 설정: RT − 0~60% → 반쪽 축이라 0~50%로 적용 (끝은 0%라 Steam 기본 32000)
-        var rt = new MappingBinding { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, -1), RangeLow = 0, RangeHigh = 60 };
-        Assert.Equal((0, SteamLayoutPlanner.SteamTriggerRangeEndDefault), SteamLayoutPlanner.TriggerRangeUnits(rt));
-        var p = MapperProfile.CreateDefault(Fixtures.TA320);
-        p.Games.Add(new GameMapping { AppId = "1000", GameName = "G", Bindings = { rt } });
-        var v = SteamConfigValidator.ValidateMapper(p);
-        Assert.True(v.IsValid, string.Join("\n", v.Errors));
-        Assert.Contains(v.Warnings, w => w.Contains("50%까지만"));
     }
 
     [Fact]

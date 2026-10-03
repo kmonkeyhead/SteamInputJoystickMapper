@@ -87,12 +87,15 @@ public static class SteamLayoutPlanner
         var placed = new HashSet<string>();
         var pending = new List<MappingBinding>();
 
-        // 레이아웃에 올릴 소스 문자열: 축 전체. 방향 있는 축 → 트리거(쓰로틀 → LT/RT)는 −면 뒤집어서("a3~") 0%쪽이 최대가 되게.
-        // 쓰로틀 → LT/RT는 Steam 자체 항목("lefttrigger:+a2,righttrigger:-a2")과 같이 양쪽 다 반쪽 축으로 둔다.
-        // 사용자 PC에서 확인: "lefttrigger:a3"와 함께 쓴 "righttrigger:a3~"/"righttrigger:-a3"는 Steam에서 움직이지 않음.
+        // 쓰로틀 → LT/RT 레이아웃 형식:
+        //  - + 방향만 쓰는 축: 축 전체 "a3" (확인됨: "lefttrigger:a3" 동작). 범위 0~100% 자유.
+        //  - − 방향을 쓰는 축(둘 다 쓰는 경우 포함): Steam 자체 항목("lefttrigger:+a2,righttrigger:-a2")과 같이 반쪽 "+a3"/"-a3".
+        //    사용자 PC에서 확인: "lefttrigger:a3"와 함께 쓴 "righttrigger:a3~"/"righttrigger:-a3"는 움직이지 않음.
+        var split = SplitAxes(profile);
         string? LayoutSource(MappingBinding b, bool invert) =>
             IsDirectedAxisToTrigger(b)
-                ? (b.Source.AxisSign < 0 ? "-" : "+") + SdlElements.SourceFor(device, b.Source.Whole, invert: false)
+                ? (split.Contains(b.Source.Axis!.Value) ? (b.Source.AxisSign < 0 ? "-" : "+") : "")
+                  + SdlElements.SourceFor(device, b.Source.Whole, invert: false)
                 : SdlElements.SourceFor(device, b.Source.Whole, invert);
         // 같은 축이라도 트리거용(방향별)과 스틱/버튼용은 서로 다른 자리에 둔다
         string? Key(MappingBinding b) => IsDirectedAxisToTrigger(b) ? "T:" + LayoutSource(b, false) : LayoutSource(b, false);
@@ -133,17 +136,26 @@ public static class SteamLayoutPlanner
         b.Source.IsHalfAxis && XboxOutputInfo.KindOf(b.Target) == XboxOutputKind.Trigger;
 
     /// <summary>
-    /// 감지 범위(축 %) → Steam 트리거 범위 시작/끝 (0~32767). 장치 설정에서 +는 축 그대로(0%→0, 100%→최대),
-    /// −는 뒤집어서(0%→최대) 트리거 자리에 들어가므로 −는 범위를 뒤집는다.
+    /// 반으로 나눠 쓰는 축: 어느 게임에서든 − 방향(0%에서 최대) 트리거로 쓰인 축. − 는 반쪽 축으로만 표현되고,
+    /// 같은 축을 + 로도 쓰면 Steam이 축 전체 + 반쪽 조합을 받아들이지 않으므로 + 도 반쪽(50~100%)이 된다.
     /// </summary>
-    public static (int Start, int End) TriggerRangeUnits(MappingBinding b)
+    public static HashSet<JoyAxis> SplitAxes(MapperProfile profile) =>
+        profile.Games.SelectMany(g => g.Bindings)
+            .Where(b => IsDirectedAxisToTrigger(b) && b.Source.AxisSign < 0)
+            .Select(b => b.Source.Axis!.Value).ToHashSet();
+
+    /// <summary>
+    /// 감지 범위(축 %) → Steam 트리거 범위 시작/끝 (0~32767).
+    /// split이면 반쪽 축이라 트리거 값은 쓰로틀 50%에서 0 (−: p% → (50 - p) * 2 %, +: p% → (p - 50) * 2 %, 50% 넘는 부분은 잘림).
+    /// 아니면 축 전체(+ 만): p% 그대로.
+    /// </summary>
+    public static (int Start, int End) TriggerRangeUnits(MappingBinding b, bool split)
     {
         var (low, high) = b.TriggerRange();
-        // 반쪽 축이라 트리거 값은 쓰로틀 50%에서 0. −: p% → (50 - p) * 2 %, +: p% → (p - 50) * 2 %.
-        // 범위가 가운데(50%)를 넘으면 50%까지만.
-        var (start, end) = b.Source.AxisSign < 0
-            ? ((50 - Math.Min(high, 50)) * 2, (50 - Math.Min(low, 50)) * 2)
-            : ((Math.Max(low, 50) - 50) * 2, (Math.Max(high, 50) - 50) * 2);
+        var (start, end) = !split ? (low, high)
+            : b.Source.AxisSign < 0
+                ? ((50 - Math.Min(high, 50)) * 2, (50 - Math.Min(low, 50)) * 2)
+                : ((Math.Max(low, 50) - 50) * 2, (Math.Max(high, 50) - 50) * 2);
         // 범위가 축 끝까지 닿으면 Steam 기본값(32000)을 쓴다: 축이 정확히 끝까지 가지 않아도 최대가 되도록
         return (InnerDeadZoneUnits(start), end >= 100 ? SteamTriggerRangeEndDefault : InnerDeadZoneUnits(end));
     }
@@ -275,7 +287,10 @@ public static class SteamLayoutPlanner
                 {
                     // 축 → 트리거: 방향 있으면(쓰로틀 → LT/RT) 같은 방향 반쪽 축 "+aN"/"-aN" 자리, 방향 없으면 축 전체 자리.
                     var directed = b.Source.IsHalfAxis;
-                    if (src.HalfSign != (directed ? (b.Source.AxisSign < 0 ? '-' : '+') : (char?)null)) continue;
+                    // 방향 있음: 반으로 나눈 축이면 같은 방향 반쪽 자리, 아니면(+ 만) 축 전체 자리
+                    if (directed && src.HalfSign == null && b.Source.AxisSign < 0) continue;
+                    if (directed && src.HalfSign != null && src.HalfSign != (b.Source.AxisSign < 0 ? '-' : '+')) continue;
+                    if (!directed && src.HalfSign != null) continue;
                     if (src.Inverted != (!directed && b.Invert)) continue;
                     if (TriggerSource(element) is not { } trig) continue;
                     var output = b.Target == XboxOutput.LT ? 1 : 2;
@@ -283,7 +298,7 @@ public static class SteamLayoutPlanner
                     plan.TriggerOutputs[trig] = output;
                     // Steam 기본 트리거 설정과 같이 "끝까지 당기기"도 같은 트리거로: 끝까지 당기면 확실히 최대
                     plan.ButtonBindings.TryAdd((trig, "click"), output == 1 ? "TRIGGER_LEFT" : "TRIGGER_RIGHT");
-                    if (directed) plan.TriggerRanges[trig] = TriggerRangeUnits(b);
+                    if (directed) plan.TriggerRanges[trig] = TriggerRangeUnits(b, split: src.HalfSign != null);
                     else if (b.DeadZone > 0) plan.TriggerRanges[trig] = (InnerDeadZoneUnits(b.DeadZone), null);
                     usedElements.Add(element);
                     ok = true;

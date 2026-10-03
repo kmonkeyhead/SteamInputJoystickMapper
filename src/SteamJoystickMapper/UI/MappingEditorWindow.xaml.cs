@@ -55,7 +55,8 @@ public partial class MappingEditorWindow : Window
                         "버튼 출력에 축을 움직이면 그 방향(−/+)이 버튼이 되며, 데드존 %를 넘게 꺾어야 눌립니다 " +
                         "(그 축의 스틱은 이 게임에서 스틱으로 쓸 수 없음). " +
                         "LT/RT [감지]: 쓰로틀을 쓸 방향으로 움직이면 0%쪽은 − 0~40%(0%에서 최대), 100%쪽은 + 60~100%(100%에서 최대)로 들어갑니다. " +
-                        "범위는 시작/끝 % 칸에서 고칠 수 있습니다. 축 반전은 모든 게임이 같아야 합니다.";
+                        "범위는 시작/끝 % 칸에서 고칠 수 있습니다 (쓰로틀을 + 로만 쓰면 0~100% 자유, − 로도 쓰면 − 는 0~50%, + 는 50~100%). " +
+                        "축 반전은 모든 게임이 같아야 합니다.";
         HeaderText.Text = $"{profile.ProfileName}   ·   {profile.Device.Name} [{profile.Device.Vid}:{profile.Device.Pid}]";
 
         var bindings = game.Bindings;
@@ -378,9 +379,7 @@ public sealed class BindingRow : Observable
     public string SourceText => IsHeader ? _headerText! : _source == null ? "—" : _source.DisplayName + RangeText;
     /// <summary>쓰로틀 → LT/RT의 감지 범위와 최대 지점 (축 %).</summary>
     private string RangeText => !ShowRange ? "" :
-        _source!.AxisSign < 0
-            ? $"  ({RangeLow}~{Math.Min(RangeHigh, 50)}%, {RangeLow}%에서 최대{(RangeHigh > 50 ? ", − 는 50%까지" : "")})"
-            : $"  ({Math.Max(RangeLow, 50)}~{RangeHigh}%, {RangeHigh}%에서 최대{(RangeLow < 50 ? ", + 는 50%부터" : "")})";
+        _source!.AxisSign < 0 ? $"  ({RangeLow}~{RangeHigh}%, {RangeLow}%에서 최대)" : $"  ({RangeLow}~{RangeHigh}%, {RangeHigh}%에서 최대)";
 
     /// <summary>방향 있는 축 → LT/RT: 데드존 대신 감지 범위 시작~끝(축 %)을 입력한다.</summary>
     public bool ShowRange => IsAxisToTrigger && _source is { IsHalfAxis: true };
@@ -484,11 +483,9 @@ public sealed class BindingRow : Observable
             {
                 // 쓰로틀 → LT/RT: 감지 범위 안에서 최대 지점 쪽으로 갈수록 커짐 (0..1을 막대 -1..1에 표시)
                 var pct = (snap.Axes.GetValueOrDefault(_source.Axis!.Value) + 1) * 50;
-                // 쓰로틀은 가운데에서 반으로 나뉜다: − 는 0~50%, + 는 50~100% 안에서만 (Steam은 한 축을 반쪽 +/− 로만 나눠 씀)
-                var low = _source.AxisSign > 0 ? Math.Max(RangeLow, 50) : RangeLow;
-                var high = _source.AxisSign < 0 ? Math.Min(RangeHigh, 50) : RangeHigh;
-                var span = Math.Max(1, high - low);
-                var outVal = _source.AxisSign < 0 ? (high - pct) / span : (pct - low) / span;
+                // 범위가 0~50 / 50~100을 벗어나면(쓰로틀을 LT·RT 둘 다에 쓸 때) 검증 오류로 알려 준다
+                var span = Math.Max(1, RangeHigh - RangeLow);
+                var outVal = _source.AxisSign < 0 ? (RangeHigh - pct) / span : (pct - RangeLow) / span;
                 v = Math.Clamp(outVal, 0, 1) * 2 - 1;
                 break;
             }
