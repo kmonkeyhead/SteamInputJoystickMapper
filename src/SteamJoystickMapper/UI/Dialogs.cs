@@ -127,7 +127,7 @@ public static class Dialogs
             Child = new Image
             {
                 Source = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/Assets/kakaopay-donate-qr.png")),
-                Width = 240, Height = 240, ToolTip = "카카오페이 후원 QR 코드",
+                Width = 260, Stretch = Stretch.Uniform, ToolTip = "카카오페이 후원 QR 코드",
             },
         });
         var kofi = new Button { Content = "Ko-fi로 후원하기", Padding = new Thickness(14, 6, 14, 6), Margin = new Thickness(0, 14, 0, 0), HorizontalAlignment = HorizontalAlignment.Stretch };
