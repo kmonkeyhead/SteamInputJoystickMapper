@@ -108,12 +108,15 @@ public static class SteamLayoutPlanner
             placed.Add(key);
         }
 
-        foreach (var b in profile.Games.SelectMany(g => g.Bindings))
+        // 축 → 트리거(쓰로틀)가 트리거 자리를 먼저 차지하고, 남은 트리거 자리는 버튼 → LT/RT가 쓴다
+        var ordered = profile.Games.SelectMany(g => g.Bindings)
+            .OrderBy(b => b.Source.Kind == PhysicalInputKind.Axis && XboxOutputInfo.KindOf(b.Target) == XboxOutputKind.Trigger ? 0 : 1);
+        foreach (var b in ordered)
         {
             var key = Key(b);
             if (key == null || placed.Contains(key)) continue;
             var natural = b.Source.IsHalfAxis && !IsDirectedAxisToTrigger(b) ? null : SdlElements.NaturalElement(b.Target);
-            if (natural != null && layout.Get(natural) == null && Fits(b.Source, natural)) Place(natural, b, key);
+            if (natural != null && layout.Get(natural) == null && Fits(b, natural)) Place(natural, b, key);
             else pending.Add(b);
         }
         foreach (var b in pending)
@@ -166,12 +169,13 @@ public static class SteamLayoutPlanner
     public const int SteamTriggerRangeEndDefault = 32000;
 
     /// <summary>
-    /// 축은 스틱/트리거 자리에만, 버튼/POV는 버튼형 자리에만. 트리거 자리는 아날로그 축(쓰로틀 등)용으로 남겨 두고,
-    /// 버튼 → LT/RT는 다른 버튼 자리에 두고 게임별 설정에서 "xinput_button TRIGGER_LEFT/RIGHT"로 누른다.
+    /// 축은 스틱/트리거 자리에만, 버튼/POV는 버튼형 자리에만.
+    /// 버튼 → LT/RT는 그 트리거 자리가 비어 있으면 트리거 자리에 직접 둔다("lefttrigger:b13": 누르면 트리거 최대).
+    /// 쓰로틀이 트리거 자리를 쓰면 다른 버튼 자리에 두고 게임별 설정에서 "xinput_button TRIGGER_LEFT/RIGHT"(끝까지 당김)로 누른다.
     /// </summary>
-    private static bool Fits(PhysicalInput source, string element) => source.Kind == PhysicalInputKind.Axis
+    private static bool Fits(MappingBinding b, string element) => b.Source.Kind == PhysicalInputKind.Axis
         ? FreeStickElements.Contains(element) || FreeTriggerElements.Contains(element)
-        : ButtonSlot(element) != null && !FreeTriggerElements.Contains(element);
+        : ButtonSlot(element) != null && (!FreeTriggerElements.Contains(element) || XboxOutputInfo.KindOf(b.Target) == XboxOutputKind.Trigger);
 
     // ---- 요소 ↔ 게임별 소스 ----
 
@@ -338,7 +342,12 @@ public static class SteamLayoutPlanner
                     if (xinput == null) continue;
                     if (plan.ButtonBindings.TryGetValue(slot, out var existingX) && existingX != xinput) continue;
                     plan.ButtonBindings[slot] = xinput;
-                    if (TriggerSource(element) is { } trigSrc) plan.TriggerOutputs.TryAdd(trigSrc, 0);
+                    // 버튼이 트리거 자리에 있으면(버튼 → LT/RT) 아날로그 값(누르면 최대)도 같은 트리거로 보낸다
+                    if (TriggerSource(element) is { } trigSrc)
+                    {
+                        if (b.Target is XboxOutput.LT or XboxOutput.RT) plan.TriggerOutputs[trigSrc] = b.Target == XboxOutput.LT ? 1 : 2;
+                        else plan.TriggerOutputs.TryAdd(trigSrc, 0);
+                    }
                     usedElements.Add(element);
                     ok = true;
                     break;

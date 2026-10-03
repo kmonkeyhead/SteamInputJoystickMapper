@@ -282,6 +282,23 @@ public class ThrottleToTriggersTests : IDisposable
     }
 
     [Fact]
+    public void ButtonToLT_UsesTriggerSlot_WhenFree()
+    {
+        // 버튼 14 → LT: 트리거 자리가 비어 있으면 장치 설정에서부터 LT 자리 (누르면 LT 최대, Steam 테스트 화면에서도 LT)
+        var p = MapperProfile.CreateDefault(Fixtures.TA320);
+        var bindings = Presets.AceCombatFlightStick(Fixtures.TA320);
+        bindings.Add(new MappingBinding { Target = XboxOutput.LT, Source = PhysicalInput.FromButton(13) });
+        p.Games.Add(new GameMapping { AppId = "1000", GameName = "G", Bindings = bindings });
+        var plan = _service.Prepare(p);
+        Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
+        Assert.Equal("b13", plan.Layout!.Get("lefttrigger"));
+        _service.Execute(plan);
+        var lt = Group("left_trigger");
+        Assert.Equal("1", lt.Find("settings")!.GetValue("output_trigger"));
+        Assert.Equal("xinput_button TRIGGER_LEFT", lt.Find("inputs", "click", "activators", "Full_Press", "bindings")!.GetValue("binding"));
+    }
+
+    [Fact]
     public void Throttle_IsIgnoredByDefault()
     {
         // 쓰로틀 게임을 고르지 않으면(쓰로틀 사용 안 함) 쓰로틀 매핑은 장치 설정에도 게임 설정에도 들어가지 않는다
