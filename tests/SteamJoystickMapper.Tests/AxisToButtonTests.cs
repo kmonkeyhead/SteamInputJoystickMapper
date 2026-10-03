@@ -171,9 +171,9 @@ public class ThrottleToTriggersTests : IDisposable
 
         var plan = _service.Prepare(p);
         Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
-        // RT(+)는 쓰로틀 전체, LT(−)는 반쪽 축 "-a3" (Steam이 트리거 축 뒤집기를 지원하지 않음)
+        // Steam 자체 항목과 같이 쓰로틀을 가운데에서 반쪽 축 +/− 로 나눔
         Assert.Equal("-a3", plan.Layout!.Get("lefttrigger"));
-        Assert.Equal("a3", plan.Layout.Get("righttrigger"));
+        Assert.Equal("+a3", plan.Layout.Get("righttrigger"));
         _service.Execute(plan);
 
         var lt = Group("left_trigger").Find("settings")!;
@@ -184,7 +184,7 @@ public class ThrottleToTriggersTests : IDisposable
         Assert.Equal((60 * 32767 / 100).ToString(), lt.GetValue("deadzone_inner_radius"));
         Assert.Equal((80 * 32767 / 100).ToString(), lt.GetValue("deadzone_outer_radius"));
         // RT: 40~100%
-        Assert.Equal((40 * 32767 / 100).ToString(), rt.GetValue("deadzone_inner_radius"));
+        Assert.Null(rt.GetValue("deadzone_inner_radius")); // + 40~100 → 반쪽 축이라 50~100 = 시작 0
         Assert.Equal("32000", rt.GetValue("deadzone_outer_radius")); // 끝까지 닿으면 Steam 기본값
         // Steam 기본 트리거 설정과 같이 "끝까지 당기기"도 같은 트리거
         string? Click(string source) => Group(source).Find("inputs", "click", "activators", "Full_Press", "bindings")?.GetValue("binding");

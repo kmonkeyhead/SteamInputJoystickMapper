@@ -112,11 +112,15 @@ public static class SteamConfigValidator
                 var (low, high) = b.TriggerRange();
                 if (low < 0 || high > 100 || low >= high)
                     r.Errors.Add($"{name}: 감지 범위는 0~100% 안에서 시작 < 끝이어야 합니다 (지금 {low}~{high}%).");
-                // − 방향은 Steam이 트리거 축 뒤집기를 지원하지 않아 반쪽 축(0~50%)으로만 표현된다
+                // 쓰로틀은 가운데(50%)에서 반으로 나뉜다 (Steam은 한 축을 반쪽 +/− 로만 두 트리거에 나눠 쓴다)
                 else if (b.Source.AxisSign < 0 && low >= 50)
                     r.Errors.Add($"{name}: − 방향(0%에서 최대) 범위는 50%보다 아래여야 합니다 (지금 {low}~{high}%).");
+                else if (b.Source.AxisSign > 0 && high <= 50)
+                    r.Errors.Add($"{name}: + 방향(100%에서 최대) 범위는 50%보다 위여야 합니다 (지금 {low}~{high}%).");
                 else if (b.Source.AxisSign < 0 && high > 50)
                     r.Warnings.Add($"{name}: − 방향 범위는 50%까지만 적용됩니다 ({low}~{high}% → {low}~50%).");
+                else if (b.Source.AxisSign > 0 && low < 50)
+                    r.Warnings.Add($"{name}: + 방향 범위는 50%부터만 적용됩니다 ({low}~{high}% → 50~{high}%).");
             }
             // 축 → 버튼/트리거: 데드존(트리거 범위 시작)을 넘어야 입력됨
             else if (axisToButton || (b.Source.Kind == PhysicalInputKind.Axis && targetKind == XboxOutputKind.Trigger))

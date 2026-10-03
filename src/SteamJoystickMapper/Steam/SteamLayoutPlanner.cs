@@ -88,11 +88,11 @@ public static class SteamLayoutPlanner
         var pending = new List<MappingBinding>();
 
         // 레이아웃에 올릴 소스 문자열: 축 전체. 방향 있는 축 → 트리거(쓰로틀 → LT/RT)는 −면 뒤집어서("a3~") 0%쪽이 최대가 되게.
-        // Steam은 트리거 자리의 축 뒤집기("~")를 반영하지 않으므로(사용자 PC에서 확인: "a3~" → RT가 오르지 않음),
-        // − 방향은 Steam 자체 항목과 같은 반쪽 축("-a3": 가운데 0 → 0%쪽 끝 최대)으로 둔다.
+        // 쓰로틀 → LT/RT는 Steam 자체 항목("lefttrigger:+a2,righttrigger:-a2")과 같이 양쪽 다 반쪽 축으로 둔다.
+        // 사용자 PC에서 확인: "lefttrigger:a3"와 함께 쓴 "righttrigger:a3~"/"righttrigger:-a3"는 Steam에서 움직이지 않음.
         string? LayoutSource(MappingBinding b, bool invert) =>
             IsDirectedAxisToTrigger(b)
-                ? (b.Source.AxisSign < 0 ? "-" : "") + SdlElements.SourceFor(device, b.Source.Whole, invert: false)
+                ? (b.Source.AxisSign < 0 ? "-" : "+") + SdlElements.SourceFor(device, b.Source.Whole, invert: false)
                 : SdlElements.SourceFor(device, b.Source.Whole, invert);
         // 같은 축이라도 트리거용(방향별)과 스틱/버튼용은 서로 다른 자리에 둔다
         string? Key(MappingBinding b) => IsDirectedAxisToTrigger(b) ? "T:" + LayoutSource(b, false) : LayoutSource(b, false);
@@ -139,10 +139,11 @@ public static class SteamLayoutPlanner
     public static (int Start, int End) TriggerRangeUnits(MappingBinding b)
     {
         var (low, high) = b.TriggerRange();
-        // −: 트리거 값은 쓰로틀 50%에서 0, 0%에서 최대 → 쓰로틀 p% 의 트리거 값 = (50 - p) * 2 %. 50% 넘는 범위는 50%까지만.
+        // 반쪽 축이라 트리거 값은 쓰로틀 50%에서 0. −: p% → (50 - p) * 2 %, +: p% → (p - 50) * 2 %.
+        // 범위가 가운데(50%)를 넘으면 50%까지만.
         var (start, end) = b.Source.AxisSign < 0
             ? ((50 - Math.Min(high, 50)) * 2, (50 - Math.Min(low, 50)) * 2)
-            : (low, high);
+            : ((Math.Max(low, 50) - 50) * 2, (Math.Max(high, 50) - 50) * 2);
         // 범위가 축 끝까지 닿으면 Steam 기본값(32000)을 쓴다: 축이 정확히 끝까지 가지 않아도 최대가 되도록
         return (InnerDeadZoneUnits(start), end >= 100 ? SteamTriggerRangeEndDefault : InnerDeadZoneUnits(end));
     }
@@ -272,9 +273,9 @@ public static class SteamLayoutPlanner
 
                 if (kind == XboxOutputKind.Trigger && src.Type == 'a')
                 {
-                    // 축 → 트리거: + 방향/방향 없음은 축 전체 자리, − 방향(쓰로틀 0%쪽 최대)은 반쪽 축 "-aN" 자리.
+                    // 축 → 트리거: 방향 있으면(쓰로틀 → LT/RT) 같은 방향 반쪽 축 "+aN"/"-aN" 자리, 방향 없으면 축 전체 자리.
                     var directed = b.Source.IsHalfAxis;
-                    if (src.HalfSign != (directed && b.Source.AxisSign < 0 ? '-' : (char?)null)) continue;
+                    if (src.HalfSign != (directed ? (b.Source.AxisSign < 0 ? '-' : '+') : (char?)null)) continue;
                     if (src.Inverted != (!directed && b.Invert)) continue;
                     if (TriggerSource(element) is not { } trig) continue;
                     var output = b.Target == XboxOutput.LT ? 1 : 2;
