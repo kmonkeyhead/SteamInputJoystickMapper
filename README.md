@@ -1,4 +1,4 @@
-# Steam Input Joystick Mapper
+# Monkeyhead's Steam Input Joystick Mapper
 
 DirectInput/HID 비행 조이스틱의 축/버튼을 GUI에서 **게임별로** 매핑하고, 이를 Steam Input Xbox 패드 설정으로 변환해 적용하는 Windows 설정 도구 (C# / .NET 8 / WPF).
 

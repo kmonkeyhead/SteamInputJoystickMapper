@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:SteamJoystickMapper.Localization"
-        Title="Monkeyhead Mapper" Width="780" Height="860" MinWidth="640" MinHeight="620"
+        Title="Monkeyhead's Steam Input Joystick Mapper" Width="780" Height="860" MinWidth="640" MinHeight="620"
         WindowStartupLocation="CenterScreen" FontSize="13">
     <Window.Resources>
         <Style x:Key="LangButton" TargetType="ToggleButton">
@@ -33,8 +33,7 @@
                         Margin="0" Padding="12,3" FontWeight="SemiBold" Foreground="White" Background="#E0533D" BorderBrush="#C9432F"/>
             </StackPanel>
             <StackPanel>
-                <TextBlock Text="Steam Input Joystick Mapper" FontSize="20" FontWeight="Bold"/>
-                <TextBlock x:Name="SteamInfoText" Foreground="Gray" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                <TextBlock x:Name="SteamInfoText" Foreground="Gray" VerticalAlignment="Center" TextWrapping="Wrap"/>
             </StackPanel>
         </DockPanel>
 
