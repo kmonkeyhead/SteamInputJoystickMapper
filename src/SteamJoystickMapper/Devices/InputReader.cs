@@ -85,6 +85,8 @@ public sealed class InputReader : IDisposable
 public sealed class InputDetector
 {
     private const double AxisThreshold = 0.5;
+    /// <summary>LT/RT 감지: 작은 범위(예: 쓰로틀 10~20%)도 잡도록 3%만 움직여도 축으로 본다.</summary>
+    private const double PreferAxisThreshold = 0.06;
     private InputSnapshot? _baseline;
 
     public void Reset(InputSnapshot? baseline) => _baseline = baseline;
@@ -108,7 +110,7 @@ public sealed class InputDetector
         {
             var moved = current.Axes
                 .Select(kv => (Axis: kv.Key, Delta: Math.Abs(kv.Value - _baseline.Axes.GetValueOrDefault(kv.Key))))
-                .Where(x => x.Delta > AxisThreshold / 2).OrderByDescending(x => x.Delta).FirstOrDefault();
+                .Where(x => x.Delta > PreferAxisThreshold).OrderByDescending(x => x.Delta).FirstOrDefault();
             if (moved.Delta > 0) return PhysicalInput.FromAxis(moved.Axis);
         }
 

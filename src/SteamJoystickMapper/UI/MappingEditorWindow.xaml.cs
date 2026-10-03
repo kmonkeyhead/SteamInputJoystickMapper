@@ -54,8 +54,8 @@ public partial class MappingEditorWindow : Window
         HintText.Text = "이 게임에서 쓸 매핑입니다. 비워 둔 출력은 이 게임에서 동작하지 않습니다. " +
                         "버튼 출력에 축을 움직이면 그 방향(−/+)이 버튼이 되며, 데드존 %를 넘게 꺾어야 눌립니다 " +
                         "(그 축의 스틱은 이 게임에서 스틱으로 쓸 수 없음). " +
-                        "LT/RT에 쓰로틀을 움직이면 멈춘 쪽(0%쪽 −, 100%쪽 +)이 트리거가 되고, 범위 시작~끝 %를 입력합니다 " +
-                        "(− 는 시작 %에서 최대, + 는 끝 %에서 최대. 예: LT − 10~20, RT + 40~100). 축 반전은 모든 게임이 같아야 합니다.";
+                        "LT/RT [감지]: 쓰로틀을 눌리기 시작할 위치에 두고 [감지] → 최대가 될 위치까지 움직여 멈추면 그 구간이 범위가 됩니다 " +
+                        "(멈춘 쪽이 최대). 시작/끝 % 칸에서 숫자를 고칠 수 있습니다. 축 반전은 모든 게임이 같아야 합니다.";
         HeaderText.Text = $"{profile.ProfileName}   ·   {profile.Device.Name} [{profile.Device.Vid}:{profile.Device.Pid}]";
 
         var bindings = game.Bindings;
@@ -161,14 +161,54 @@ public partial class MappingEditorWindow : Window
         _detectRow = row;
         row.IsDetecting = true;
         _detector.Reset(_last);
+        _detectBaseline = _last;
         _detectStarted = DateTime.Now;
-        DetectStatusText.Text = $"{row.TargetText}: 입력을 기다리는 중...";
+        DetectStatusText.Text = XboxOutputInfo.KindOf(row.Target) == XboxOutputKind.Trigger
+            ? $"{row.TargetText}: 쓰로틀을 눌리기 시작할 위치에 두고, 최대가 될 위치까지 움직인 뒤 멈추세요. (버튼을 눌러도 됩니다)"
+            : $"{row.TargetText}: 입력을 기다리는 중...";
     }
 
     private void StopDetect()
     {
         if (_detectRow != null) _detectRow.IsDetecting = false;
         _detectRow = null;
+        _rangeAxis = null;
+    }
+
+    // ---- 동작으로 범위 감지 (축 → LT/RT): 시작 위치 → 움직여 멈춘 위치 = 감지 범위, 멈춘 쪽이 최대 ----
+    private InputSnapshot? _detectBaseline;
+    private JoyAxis? _rangeAxis;
+    private double _rangeStartPct, _rangeLastPct;
+    private DateTime _rangeLastMove;
+    private static readonly TimeSpan RangeSettle = TimeSpan.FromMilliseconds(700);
+    private const double RangeMinSpanPct = 5;
+
+    private static double Pct(InputSnapshot snap, JoyAxis axis) => (snap.Axes.GetValueOrDefault(axis) + 1) * 50;
+
+    private void RangeCaptureTick(BindingRow row, InputSnapshot snap)
+    {
+        var axis = _rangeAxis!.Value;
+        var pct = Pct(snap, axis);
+        if (Math.Abs(pct - _rangeLastPct) > 0.5)
+        {
+            _rangeLastPct = pct;
+            _rangeLastMove = DateTime.Now;
+            _detectStarted = DateTime.Now; // 움직이는 동안은 시간 초과 없음
+        }
+        DetectStatusText.Text = $"{row.TargetText} 범위 감지: 시작 {_rangeStartPct:0}% → 현재 {pct:0}%  (멈추면 확정)";
+        if (DateTime.Now - _rangeLastMove < RangeSettle || Math.Abs(pct - _rangeStartPct) < RangeMinSpanPct) return;
+
+        // 멈춘 쪽이 최대: 0%쪽으로 움직였으면 −(낮은 %에서 최대), 100%쪽이면 +(높은 %에서 최대)
+        var sign = pct < _rangeStartPct ? -1 : 1;
+        var low = (int)Math.Round(Math.Min(pct, _rangeStartPct));
+        var high = (int)Math.Round(Math.Max(pct, _rangeStartPct));
+        var input = PhysicalInput.FromAxisHalf(axis, sign);
+        row.SetSource(input);
+        row.RangeLow = low;
+        row.RangeHigh = high;
+        DetectStatusText.Text = $"{input.DisplayName} → {row.TargetText}: {low}~{high}%, {(sign < 0 ? low : high)}%에서 최대";
+        StopDetect();
+        Revalidate();
     }
 
     private void DetectTick(InputSnapshot snap)
@@ -178,6 +218,11 @@ public partial class MappingEditorWindow : Window
         {
             DetectStatusText.Text = "입력이 감지되지 않았습니다.";
             StopDetect();
+            return;
+        }
+        if (_rangeAxis != null)
+        {
+            RangeCaptureTick(row, snap);
             return;
         }
         var input = _detector.Detect(snap, preferAxis: XboxOutputInfo.KindOf(row.Target) == XboxOutputKind.Trigger);
@@ -191,9 +236,13 @@ public partial class MappingEditorWindow : Window
         }
         else if (kind == XboxOutputKind.Trigger && input.Kind == PhysicalInputKind.Axis)
         {
-            // 트리거는 축을 가운데에서 나눈 한쪽만 쓴다: 움직여 멈춘 쪽 (쓰로틀을 0% 쪽으로 → −, 100% 쪽으로 → +)
-            var v = snap.Axes.GetValueOrDefault(input.Axis!.Value);
-            input = PhysicalInput.FromAxisHalf(input.Axis.Value, Math.Abs(v) > 0.2 ? Math.Sign(v) : _detector.AxisDirection(snap, input.Axis.Value));
+            // 축 → 트리거는 동작으로 범위를 잡는다: 감지 시작 때 위치가 시작점, 움직여 멈춘 위치가 최대
+            _rangeAxis = input.Axis!.Value;
+            _rangeStartPct = Pct(_detectBaseline ?? snap, input.Axis.Value);
+            _rangeLastPct = Pct(snap, input.Axis.Value);
+            _rangeLastMove = DateTime.Now;
+            RangeCaptureTick(row, snap);
+            return;
         }
         var compatible = kind switch
         {
