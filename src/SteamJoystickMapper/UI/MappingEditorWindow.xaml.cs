@@ -378,7 +378,9 @@ public sealed class BindingRow : Observable
     public string SourceText => IsHeader ? _headerText! : _source == null ? "—" : _source.DisplayName + RangeText;
     /// <summary>쓰로틀 → LT/RT의 감지 범위와 최대 지점 (축 %).</summary>
     private string RangeText => !ShowRange ? "" :
-        _source!.AxisSign < 0 ? $"  ({RangeLow}~{RangeHigh}%, {RangeLow}%에서 최대)" : $"  ({RangeLow}~{RangeHigh}%, {RangeHigh}%에서 최대)";
+        _source!.AxisSign < 0
+            ? $"  ({RangeLow}~{Math.Min(RangeHigh, 50)}%, {RangeLow}%에서 최대{(RangeHigh > 50 ? ", − 는 50%까지" : "")})"
+            : $"  ({RangeLow}~{RangeHigh}%, {RangeHigh}%에서 최대)";
 
     /// <summary>방향 있는 축 → LT/RT: 데드존 대신 감지 범위 시작~끝(축 %)을 입력한다.</summary>
     public bool ShowRange => IsAxisToTrigger && _source is { IsHalfAxis: true };
@@ -482,8 +484,10 @@ public sealed class BindingRow : Observable
             {
                 // 쓰로틀 → LT/RT: 감지 범위 안에서 최대 지점 쪽으로 갈수록 커짐 (0..1을 막대 -1..1에 표시)
                 var pct = (snap.Axes.GetValueOrDefault(_source.Axis!.Value) + 1) * 50;
-                var span = Math.Max(1, RangeHigh - RangeLow);
-                var outVal = _source.AxisSign < 0 ? (RangeHigh - pct) / span : (pct - RangeLow) / span;
+                // − 방향은 반쪽 축이라 50%까지만 (Steam이 트리거 축 뒤집기를 지원하지 않음)
+                var high = _source.AxisSign < 0 ? Math.Min(RangeHigh, 50) : RangeHigh;
+                var span = Math.Max(1, high - RangeLow);
+                var outVal = _source.AxisSign < 0 ? (high - pct) / span : (pct - RangeLow) / span;
                 v = Math.Clamp(outVal, 0, 1) * 2 - 1;
                 break;
             }

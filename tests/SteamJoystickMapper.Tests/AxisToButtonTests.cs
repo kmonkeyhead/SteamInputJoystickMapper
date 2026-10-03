@@ -171,8 +171,8 @@ public class ThrottleToTriggersTests : IDisposable
 
         var plan = _service.Prepare(p);
         Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
-        // 쓰로틀(4번째 축 = a3) 전체를 트리거 자리에: RT는 그대로, LT는 뒤집어서(0%쪽이 최대)
-        Assert.Equal("a3~", plan.Layout!.Get("lefttrigger"));
+        // RT(+)는 쓰로틀 전체, LT(−)는 반쪽 축 "-a3" (Steam이 트리거 축 뒤집기를 지원하지 않음)
+        Assert.Equal("-a3", plan.Layout!.Get("lefttrigger"));
         Assert.Equal("a3", plan.Layout.Get("righttrigger"));
         _service.Execute(plan);
 
@@ -180,9 +180,9 @@ public class ThrottleToTriggersTests : IDisposable
         var rt = Group("right_trigger").Find("settings")!;
         Assert.Equal("1", lt.GetValue("output_trigger"));
         Assert.Equal("2", rt.GetValue("output_trigger"));
-        // LT: 뒤집힌 값 80~90% 구간 = 쓰로틀 20~10%
-        Assert.Equal((80 * 32767 / 100).ToString(), lt.GetValue("deadzone_inner_radius"));
-        Assert.Equal((90 * 32767 / 100).ToString(), lt.GetValue("deadzone_outer_radius"));
+        // LT: 반쪽 축 값 = (50 - 쓰로틀%) * 2 → 쓰로틀 20~10% = 60~80%
+        Assert.Equal((60 * 32767 / 100).ToString(), lt.GetValue("deadzone_inner_radius"));
+        Assert.Equal((80 * 32767 / 100).ToString(), lt.GetValue("deadzone_outer_radius"));
         // RT: 40~100%
         Assert.Equal((40 * 32767 / 100).ToString(), rt.GetValue("deadzone_inner_radius"));
         Assert.Equal("32000", rt.GetValue("deadzone_outer_radius")); // 끝까지 닿으면 Steam 기본값
@@ -200,6 +200,19 @@ public class ThrottleToTriggersTests : IDisposable
         var rt = new MappingBinding { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, +1), DeadZone = 20 };
         Assert.Equal((0, 40), lt.TriggerRange());
         Assert.Equal((60, 100), rt.TriggerRange());
+    }
+
+    [Fact]
+    public void MinusRangeOver50_IsClampedWithWarning()
+    {
+        // 사용자 설정: RT − 0~60% → 반쪽 축이라 0~50%로 적용 (끝은 0%라 Steam 기본 32000)
+        var rt = new MappingBinding { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, -1), RangeLow = 0, RangeHigh = 60 };
+        Assert.Equal((0, SteamLayoutPlanner.SteamTriggerRangeEndDefault), SteamLayoutPlanner.TriggerRangeUnits(rt));
+        var p = MapperProfile.CreateDefault(Fixtures.TA320);
+        p.Games.Add(new GameMapping { AppId = "1000", GameName = "G", Bindings = { rt } });
+        var v = SteamConfigValidator.ValidateMapper(p);
+        Assert.True(v.IsValid, string.Join("\n", v.Errors));
+        Assert.Contains(v.Warnings, w => w.Contains("50%까지만"));
     }
 
     [Fact]
@@ -232,7 +245,7 @@ public class ThrottleToTriggersTests : IDisposable
 
         var plan = _service.Prepare(p);
         Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
-        Assert.Equal("a3~", plan.Layout!.Get("lefttrigger")); // 트리거 자리는 쓰로틀
+        Assert.Equal("-a3", plan.Layout!.Get("lefttrigger")); // 트리거 자리는 쓰로틀
         var buttonSlot = plan.Layout.ElementFields.Single(f => f.Value == "b4").Key; // 버튼 5는 다른 버튼 자리
         Assert.DoesNotContain("trigger", buttonSlot);
         _service.Execute(plan);
