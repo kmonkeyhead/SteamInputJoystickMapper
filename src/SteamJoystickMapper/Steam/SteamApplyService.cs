@@ -47,9 +47,36 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
 
     private string? LocalConfigPath => env.LocalConfigPath;
 
-    public ApplyPlan Prepare(MapperProfile profile)
+    /// <summary>
+    /// 쓰로틀(방향 있는 축 → LT/RT)은 장치 설정을 공유하므로 한 게임 것만 쓴다: throttleAppId 게임의 쓰로틀 매핑만 남기고
+    /// 나머지 게임의 쓰로틀 매핑은 뺀다. null이면 모든 쓰로틀 매핑을 뺀다 (쓰로틀 사용 안 함). 쓰로틀만 있던 게임은 빠진다.
+    /// </summary>
+    public static MapperProfile WithThrottleFrom(MapperProfile profile, string? throttleAppId) => new()
     {
+        FormatVersion = profile.FormatVersion,
+        ProfileName = profile.ProfileName,
+        Device = profile.Device,
+        ModifiedAt = profile.ModifiedAt,
+        Games = profile.Games
+            .Select(g => g.AppId == throttleAppId ? g : new GameMapping
+            {
+                AppId = g.AppId, GameName = g.GameName,
+                Bindings = g.Bindings.Where(b => !SteamLayoutPlanner.IsDirectedAxisToTrigger(b)).ToList(),
+            })
+            .Where(g => g.Bindings.Count > 0)
+            .ToList(),
+    };
+
+    /// <summary>쓰로틀 매핑이 있는 게임들 (적용 때 고를 목록).</summary>
+    public static List<GameMapping> ThrottleGames(MapperProfile profile) =>
+        profile.Games.Where(g => SteamLayoutPlanner.ThrottleBindings(g).Any()).ToList();
+
+    /// <param name="throttleAppId">쓰로틀을 쓸 게임 (null = 쓰로틀 사용 안 함). 다른 게임의 쓰로틀 매핑은 적용하지 않는다.</param>
+    public ApplyPlan Prepare(MapperProfile original, string? throttleAppId = null)
+    {
+        var profile = WithThrottleFrom(original, throttleAppId);
         var validation = SteamConfigValidator.ValidateMapper(profile);
+        validation.Warnings.RemoveAll(w => w.Contains("쓰로틀은 특수 처리")); // 적용 단계에서는 이미 골랐음
         var configDir = env.ControllerConfigDir;
         if (configDir == null) validation.Errors.Add("Steam 사용자를 찾을 수 없어 설정 폴더를 결정할 수 없습니다.");
         if (!validation.IsValid || configDir == null) return new ApplyPlan { Profile = profile, Validation = validation };
@@ -82,6 +109,10 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
             Profile = profile, Validation = validation, ControllerId = controllerTarget.ControllerId,
             Layout = layout, LayoutChanged = layoutChanged,
         };
+        var throttleGame = original.FindGame(throttleAppId ?? "");
+        var ignored = ThrottleGames(original).Where(g => g.AppId != throttleAppId).Select(g => g.GameName).ToList();
+        if (throttleGame != null) plan.Notes.Add($"쓰로틀: {throttleGame.GameName}의 쓰로틀 설정을 사용합니다.");
+        if (ignored.Count > 0) plan.Notes.Add($"쓰로틀: 다음 게임의 쓰로틀 매핑은 적용하지 않습니다 — {string.Join(", ", ignored)}");
         if (layoutChanged && globalRoot != null)
         {
             plan.Writes[env.GlobalConfigPath] = VdfWriter.Write(SteamConfigGenerator.UpdateGlobalConfig(globalRoot, layout, device));

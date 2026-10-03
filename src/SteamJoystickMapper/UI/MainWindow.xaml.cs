@@ -24,6 +24,8 @@ public partial class MainWindow : Window
     private List<SteamGame> _allGames = new();
     private IReadOnlyList<DeviceInfo> _devices = Array.Empty<DeviceInfo>();
     private bool _busy;
+    /// <summary>이번 실행에서 마지막으로 매핑을 편집한 게임 (쓰로틀 선택의 기본값으로 먼저 보여 줌).</summary>
+    private string? _lastEditedAppId;
 
     public MainWindow()
     {
@@ -39,6 +41,10 @@ public partial class MainWindow : Window
     }
 
     private SteamGame? SelectedTarget => GameCombo.SelectedItem as SteamGame;
+
+    /// <summary>상태 표시용: 마지막으로 고른 쓰로틀 게임 (아직 쓰로틀 매핑이 있을 때만).</summary>
+    private string? CurrentThrottleAppId =>
+        SteamApplyService.ThrottleGames(_profile).Any(g => g.AppId == _settings.LastThrottleAppId) ? _settings.LastThrottleAppId : null;
     private DeviceInfo? SelectedDevice => DeviceCombo.SelectedItem as DeviceInfo;
 
     private void Initialize()
@@ -309,6 +315,7 @@ public partial class MainWindow : Window
         game.GameName = t.Name;
         if (existing == null) _profile.Games.Add(game);
         AppLog.Info($"게임 매핑 저장: {t.Name} ({game.Bindings.Count}개)");
+        _lastEditedAppId = t.AppId;
         SaveProfile();
     }
 
@@ -357,7 +364,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var plan = service.Prepare(_profile);
+        var plan = service.Prepare(_profile, CurrentThrottleAppId);
         var detail = new StringBuilder();
         detail.AppendLine(registration);
         var t = SelectedTarget;
@@ -467,7 +474,19 @@ public partial class MainWindow : Window
         try
         {
             var service = new SteamApplyService(_env, _backups);
-            var plan = service.Prepare(_profile);
+            // 쓰로틀은 기본적으로 무시: 쓰로틀 매핑이 있는 게임이 있으면 어느 게임 설정을 쓸지(또는 안 쓸지) 고른다
+            string? throttleAppId = null;
+            var throttleGames = SteamApplyService.ThrottleGames(_profile);
+            if (throttleGames.Count > 0)
+            {
+                var edited = throttleGames.FirstOrDefault(g => g.AppId == _lastEditedAppId);
+                var (cancelled, chosen) = Dialogs.ChooseThrottle(this, throttleGames, edited?.AppId ?? _settings.LastThrottleAppId);
+                if (cancelled) return;
+                throttleAppId = chosen;
+                _settings.LastThrottleAppId = chosen ?? "";
+                _settings.Save();
+            }
+            var plan = service.Prepare(_profile, throttleAppId);
             if (!plan.Validation.IsValid) { ShowValidationErrors(plan.Validation); return; }
             if (!plan.HasChanges)
             {
@@ -478,7 +497,7 @@ public partial class MainWindow : Window
 
             if (!await EnsureSteamClosedAsync("적용")) return;
             // Steam은 종료하면서 config.vdf를 다시 저장하므로 종료 후 다시 생성/검증한다.
-            plan = service.Prepare(_profile);
+            plan = service.Prepare(_profile, throttleAppId);
             if (!plan.Validation.IsValid) { ShowValidationErrors(plan.Validation); return; }
             if (!plan.HasChanges) { RefreshSteamStatus(); return; }
 

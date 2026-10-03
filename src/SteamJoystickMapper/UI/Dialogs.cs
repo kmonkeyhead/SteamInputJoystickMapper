@@ -56,6 +56,56 @@ public static class Dialogs
         return result;
     }
 
+    /// <summary>
+    /// [Steam에 적용] 때 쓰로틀 처리 선택: "쓰로틀 사용 안 함" 또는 "쓰로틀 설정한 게임으로 덮음"(게임 드롭다운).
+    /// 취소하면 Cancelled. 사용 안 함이면 AppId = null.
+    /// </summary>
+    public static (bool Cancelled, string? AppId) ChooseThrottle(Window owner, IReadOnlyList<Mapping.GameMapping> games, string? preselectAppId)
+    {
+        var result = (Cancelled: true, AppId: (string?)null);
+        var window = new Window
+        {
+            Title = "쓰로틀 설정", Owner = owner, Width = 520, SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize,
+        };
+        var panel = new StackPanel { Margin = new Thickness(16) };
+        panel.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12),
+            Text = "쓰로틀 매핑이 있는 게임이 있습니다. 쓰로틀은 장치 설정을 모든 게임이 같이 쓰므로 한 게임의 설정만 적용할 수 있습니다.",
+        });
+        var none = new RadioButton { Content = "쓰로틀 사용 안 함", Margin = new Thickness(0, 0, 0, 8) };
+        var use = new RadioButton { Content = "쓰로틀 설정한 게임으로 덮음:", Margin = new Thickness(0, 0, 0, 4) };
+        var combo = new ComboBox { ItemsSource = games, DisplayMemberPath = nameof(Mapping.GameMapping.GameName), Margin = new Thickness(20, 0, 0, 0) };
+        var pre = games.FirstOrDefault(g => g.AppId == preselectAppId);
+        combo.SelectedItem = pre ?? games.FirstOrDefault();
+        if (pre != null) use.IsChecked = true; else none.IsChecked = true;
+        combo.SelectionChanged += (_, _) => use.IsChecked = true;
+        panel.Children.Add(none);
+        panel.Children.Add(use);
+        panel.Children.Add(combo);
+        panel.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DimGray, Margin = new Thickness(0, 10, 0, 0),
+            Text = "고른 게임 외의 쓰로틀 매핑은 이번 적용에서 빠집니다. 고른 값은 다음에도 기본으로 선택됩니다.",
+        });
+        var ok = new Button { Content = "적용 계속", IsDefault = true, Padding = new Thickness(14, 5, 14, 5), Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = "취소", IsCancel = true, Padding = new Thickness(14, 5, 14, 5) };
+        ok.Click += (_, _) =>
+        {
+            result = (false, use.IsChecked == true ? (combo.SelectedItem as Mapping.GameMapping)?.AppId : null);
+            window.Close();
+        };
+        cancel.Click += (_, _) => window.Close();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
+        buttons.Children.Add(ok);
+        buttons.Children.Add(cancel);
+        panel.Children.Add(buttons);
+        window.Content = panel;
+        window.ShowDialog();
+        return result;
+    }
+
     public static string? Prompt(Window owner, string title, string label, string initial)
     {
         string? result = null;

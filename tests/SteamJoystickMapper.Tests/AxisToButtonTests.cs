@@ -171,7 +171,7 @@ public class ThrottleToTriggersTests : IDisposable
         bindings.Add(new MappingBinding { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, +1), RangeLow = 60, RangeHigh = 100 });
         p.Games.Add(new GameMapping { AppId = "1000", GameName = "G", Bindings = bindings });
 
-        var plan = _service.Prepare(p);
+        var plan = _service.Prepare(p, "1000");
         Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
         Assert.Equal("-a3", plan.Layout!.Get("lefttrigger"));
         Assert.Equal("+a3", plan.Layout.Get("righttrigger"));
@@ -201,7 +201,7 @@ public class ThrottleToTriggersTests : IDisposable
         var bindings = Presets.AceCombatFlightStick(Fixtures.TA320);
         bindings.Add(new MappingBinding { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, +1), RangeLow = 40, RangeHigh = 100 });
         p.Games.Add(new GameMapping { AppId = "1000", GameName = "G", Bindings = bindings });
-        var plan = _service.Prepare(p);
+        var plan = _service.Prepare(p, "1000");
         Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
         Assert.Equal("a3", plan.Layout!.Get("righttrigger"));
         _service.Execute(plan);
@@ -266,9 +266,9 @@ public class ThrottleToTriggersTests : IDisposable
         bindings.Add(new MappingBinding { Target = XboxOutput.LT, Source = PhysicalInput.FromButton(4) }); // 버튼 5도 LT
         p.Games.Add(new GameMapping { AppId = "1000", GameName = "G", Bindings = bindings });
 
-        var plan = _service.Prepare(p);
+        var plan = _service.Prepare(p, "1000");
         Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
-        Assert.Equal("-a3", plan.Layout!.Get("lefttrigger")); // 트리거 자리는 쓰로틀
+        Assert.Equal("a3~", plan.Layout!.Get("lefttrigger")); // 쓰로틀 매핑 1개(−): 축 전체를 뒤집어서
         var buttonSlot = plan.Layout.ElementFields.Single(f => f.Value == "b4").Key; // 버튼 5는 다른 버튼 자리
         Assert.DoesNotContain("trigger", buttonSlot);
         _service.Execute(plan);
@@ -279,6 +279,54 @@ public class ThrottleToTriggersTests : IDisposable
         var gsb = m.Get("preset")!.Get("group_source_bindings")!;
         var lt = m.GetAll("group").Single(g => g.GetValue("id") == gsb.Children!.Single(e => e.Value == "left_trigger active").Key);
         Assert.Equal("1", lt.Find("settings")!.GetValue("output_trigger")); // 쓰로틀 → LT 아날로그
+    }
+
+    [Fact]
+    public void Throttle_IsIgnoredByDefault()
+    {
+        // 쓰로틀 게임을 고르지 않으면(쓰로틀 사용 안 함) 쓰로틀 매핑은 장치 설정에도 게임 설정에도 들어가지 않는다
+        var p = MapperProfile.CreateDefault(Fixtures.TA320);
+        var bindings = Presets.AceCombatFlightStick(Fixtures.TA320);
+        bindings.Add(new MappingBinding { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, +1), RangeLow = 60, RangeHigh = 100 });
+        p.Games.Add(new GameMapping { AppId = "1000", GameName = "G", Bindings = bindings });
+        var plan = _service.Prepare(p);
+        Assert.True(plan.Validation.IsValid, string.Join("\n", plan.Validation.Errors));
+        Assert.Null(plan.Layout!.Get("righttrigger"));
+        Assert.Contains(plan.Notes, n => n.Contains("적용하지 않습니다") && n.Contains("G"));
+    }
+
+    [Fact]
+    public void ChosenThrottleGame_OverridesOthers()
+    {
+        // 게임 A는 쓰로틀 − → LT, 게임 B는 쓰로틀 + → RT: 고른 게임 것만 장치 설정에 들어간다
+        var p = MapperProfile.CreateDefault(Fixtures.TA320);
+        var a = Presets.AceCombatFlightStick(Fixtures.TA320);
+        a.Add(new MappingBinding { Target = XboxOutput.LT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, -1), RangeLow = 0, RangeHigh = 70 });
+        var b = Presets.AceCombatFlightStick(Fixtures.TA320);
+        b.Add(new MappingBinding { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, +1), RangeLow = 30, RangeHigh = 100 });
+        p.Games.Add(new GameMapping { AppId = "1000", GameName = "A", Bindings = a });
+        p.Games.Add(new GameMapping { AppId = "2000", GameName = "B", Bindings = b });
+        Assert.True(SteamConfigValidator.ValidateMapper(p).IsValid); // 서로 다른 방향이어도 오류 아님 (적용 때 하나를 고름)
+
+        var planA = _service.Prepare(p, "1000");
+        Assert.True(planA.Validation.IsValid, string.Join("\n", planA.Validation.Errors));
+        Assert.Equal("a3~", planA.Layout!.Get("lefttrigger"));
+        Assert.Null(planA.Layout.Get("righttrigger"));
+        var planB = _service.Prepare(p, "2000");
+        Assert.Equal("a3", planB.Layout!.Get("righttrigger"));
+        Assert.Contains(planB.Notes, n => n.Contains("적용하지 않습니다") && n.Contains("A"));
+    }
+
+    [Fact]
+    public void ThrottleMapping_ShowsSpecialHandlingWarning()
+    {
+        var p = MapperProfile.CreateDefault(Fixtures.TA320);
+        p.Games.Add(new GameMapping
+        {
+            AppId = "1000", GameName = "G",
+            Bindings = { new() { Target = XboxOutput.RT, Source = PhysicalInput.FromAxisHalf(JoyAxis.Slider0, +1), RangeLow = 60, RangeHigh = 100 } },
+        });
+        Assert.Contains(SteamConfigValidator.ValidateMapper(p).Warnings, w => w.Contains("쓰로틀은 특수 처리"));
     }
 
     [Fact]

@@ -20,6 +20,8 @@ public sealed class AppSettings
 {
     public string? LastAppId { get; set; }
     public string? LastDeviceInstanceId { get; set; }
+    /// <summary>[Steam에 적용] 때 마지막으로 고른 쓰로틀 게임 AppID ("" 또는 null = 쓰로틀 사용 안 함).</summary>
+    public string? LastThrottleAppId { get; set; }
 
     public static AppSettings Load()
     {

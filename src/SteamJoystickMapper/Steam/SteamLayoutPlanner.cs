@@ -87,15 +87,16 @@ public static class SteamLayoutPlanner
         var placed = new HashSet<string>();
         var pending = new List<MappingBinding>();
 
-        // 쓰로틀 → LT/RT 레이아웃 형식:
-        //  - + 방향만 쓰는 축: 축 전체 "a3" (확인됨: "lefttrigger:a3" 동작). 범위 0~100% 자유.
-        //  - − 방향을 쓰는 축(둘 다 쓰는 경우 포함): Steam 자체 항목("lefttrigger:+a2,righttrigger:-a2")과 같이 반쪽 "+a3"/"-a3".
-        //    사용자 PC에서 확인: "lefttrigger:a3"와 함께 쓴 "righttrigger:a3~"/"righttrigger:-a3"는 움직이지 않음.
+        // 쓰로틀 → LT/RT (장치 설정은 공유라, 적용할 때 쓰로틀을 쓸 게임 하나만 남긴 프로필로 만든다 — SteamApplyService):
+        //  - 그 게임의 쓰로틀 매핑 1개: 축 전체. + 는 "a3"(확인됨), − 는 뒤집어서 "a3~". 범위 0~100%.
+        //  - 2개(−/+): Steam 자체 항목("lefttrigger:+a2,righttrigger:-a2")과 같이 반쪽 "-a3"/"+a3". 범위 0~50 / 50~100.
+        //    사용자 PC에서 확인: "lefttrigger:a3"와 함께 쓴 "righttrigger:a3~"/"-a3"는 움직이지 않음.
         var split = SplitAxes(profile);
         string? LayoutSource(MappingBinding b, bool invert) =>
             IsDirectedAxisToTrigger(b)
-                ? (split.Contains(b.Source.Axis!.Value) ? (b.Source.AxisSign < 0 ? "-" : "+") : "")
-                  + SdlElements.SourceFor(device, b.Source.Whole, invert: false)
+                ? split.Contains(b.Source.Axis!.Value)
+                    ? (b.Source.AxisSign < 0 ? "-" : "+") + SdlElements.SourceFor(device, b.Source.Whole, invert: false)
+                    : SdlElements.SourceFor(device, b.Source.Whole, invert: b.Source.AxisSign < 0)
                 : SdlElements.SourceFor(device, b.Source.Whole, invert);
         // 같은 축이라도 트리거용(방향별)과 스틱/버튼용은 서로 다른 자리에 둔다
         string? Key(MappingBinding b) => IsDirectedAxisToTrigger(b) ? "T:" + LayoutSource(b, false) : LayoutSource(b, false);
@@ -135,24 +136,25 @@ public static class SteamLayoutPlanner
     public static bool IsDirectedAxisToTrigger(MappingBinding b) =>
         b.Source.IsHalfAxis && XboxOutputInfo.KindOf(b.Target) == XboxOutputKind.Trigger;
 
-    /// <summary>
-    /// 반으로 나눠 쓰는 축: 어느 게임에서든 − 방향(0%에서 최대) 트리거로 쓰인 축. − 는 반쪽 축으로만 표현되고,
-    /// 같은 축을 + 로도 쓰면 Steam이 축 전체 + 반쪽 조합을 받아들이지 않으므로 + 도 반쪽(50~100%)이 된다.
-    /// </summary>
+    /// <summary>게임 하나의 쓰로틀(방향 있는 축 → LT/RT) 매핑.</summary>
+    public static IEnumerable<MappingBinding> ThrottleBindings(GameMapping game) => game.Bindings.Where(IsDirectedAxisToTrigger);
+
+    /// <summary>반으로 나눠 쓰는 축: 한 게임에서 같은 축을 쓰로틀 매핑 2개(−/+)에 쓴 축.</summary>
     public static HashSet<JoyAxis> SplitAxes(MapperProfile profile) =>
-        profile.Games.SelectMany(g => g.Bindings)
-            .Where(b => IsDirectedAxisToTrigger(b) && b.Source.AxisSign < 0)
-            .Select(b => b.Source.Axis!.Value).ToHashSet();
+        profile.Games
+            .SelectMany(g => ThrottleBindings(g).GroupBy(b => b.Source.Axis!.Value).Where(x => x.Count() >= 2))
+            .Select(x => x.Key).ToHashSet();
 
     /// <summary>
     /// 감지 범위(축 %) → Steam 트리거 범위 시작/끝 (0~32767).
-    /// split이면 반쪽 축이라 트리거 값은 쓰로틀 50%에서 0 (−: p% → (50 - p) * 2 %, +: p% → (p - 50) * 2 %, 50% 넘는 부분은 잘림).
-    /// 아니면 축 전체(+ 만): p% 그대로.
+    /// 단일(축 전체): + 는 p% 그대로, − 는 뒤집힌 축이라 (100 - p)%.
+    /// split(반쪽 축): 쓰로틀 50%에서 0. −: p% → (50 - p) * 2 %, +: p% → (p - 50) * 2 %, 50% 넘는 부분은 잘림.
     /// </summary>
     public static (int Start, int End) TriggerRangeUnits(MappingBinding b, bool split)
     {
         var (low, high) = b.TriggerRange();
-        var (start, end) = !split ? (low, high)
+        var (start, end) = !split
+            ? (b.Source.AxisSign < 0 ? (100 - high, 100 - low) : (low, high))
             : b.Source.AxisSign < 0
                 ? ((50 - Math.Min(high, 50)) * 2, (50 - Math.Min(low, 50)) * 2)
                 : ((Math.Max(low, 50) - 50) * 2, (Math.Max(high, 50) - 50) * 2);
@@ -285,13 +287,12 @@ public static class SteamLayoutPlanner
 
                 if (kind == XboxOutputKind.Trigger && src.Type == 'a')
                 {
-                    // 축 → 트리거: 방향 있으면(쓰로틀 → LT/RT) 같은 방향 반쪽 축 "+aN"/"-aN" 자리, 방향 없으면 축 전체 자리.
                     var directed = b.Source.IsHalfAxis;
-                    // 방향 있음: 반으로 나눈 축이면 같은 방향 반쪽 자리, 아니면(+ 만) 축 전체 자리
-                    if (directed && src.HalfSign == null && b.Source.AxisSign < 0) continue;
+                    // 쓰로틀(방향 있음): 나눈 축이면 같은 방향 반쪽 자리("-aN"/"+aN"), 단일이면 축 전체 자리(− 는 뒤집힌 자리).
+                    // 방향 없는 축 → 트리거: 축 전체 자리, 매핑의 반전 값.
                     if (directed && src.HalfSign != null && src.HalfSign != (b.Source.AxisSign < 0 ? '-' : '+')) continue;
                     if (!directed && src.HalfSign != null) continue;
-                    if (src.Inverted != (!directed && b.Invert)) continue;
+                    if (src.HalfSign == null && src.Inverted != (directed ? b.Source.AxisSign < 0 : b.Invert)) continue;
                     if (TriggerSource(element) is not { } trig) continue;
                     var output = b.Target == XboxOutput.LT ? 1 : 2;
                     if (plan.TriggerOutputs.TryGetValue(trig, out var existingOut) && existingOut != 0 && existingOut != output) continue;

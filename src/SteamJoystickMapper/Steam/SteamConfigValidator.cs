@@ -45,32 +45,47 @@ public static class SteamConfigValidator
             r.Errors.Add($"{axis.Key.DisplayName}: 축 반전은 모든 게임이 같은 장치 설정을 쓰므로 게임마다 같아야 합니다 " +
                          $"(반전: {string.Join(", ", axis.Where(x => x.Binding.Invert).Select(x => x.Game.GameName).Distinct())}).");
 
-        // 쓰로틀을 − 방향(0%에서 최대)으로 쓰면 반으로 나뉜다: − 는 0~50%, 같은 축의 + 는 50~100% 안에서만.
-        // (Steam은 한 축을 두 트리거에 쓸 때 반쪽 +/− 로만 받아들임. + 만 쓰면 축 전체라 0~100% 자유)
-        var split = SteamLayoutPlanner.SplitAxes(profile);
+        // 쓰로틀(방향 있는 축 → LT/RT)은 특수 처리: 장치 설정은 모든 게임이 공유하므로 [Steam에 적용] 때 쓰로틀을 쓸 게임
+        // 하나를 고른다(나머지 게임의 쓰로틀 매핑은 적용되지 않음). 한 게임 안에서 매핑 1개면 0~100%, 2개(−/+)면 0~50 / 50~100.
         foreach (var game in profile.Games)
         {
-            foreach (var b in game.Bindings.Where(b => SteamLayoutPlanner.IsDirectedAxisToTrigger(b) && split.Contains(b.Source.Axis!.Value)))
+            var throttle = SteamLayoutPlanner.ThrottleBindings(game).ToList();
+            if (throttle.Count == 0) continue;
+            r.Warnings.Add($"[{game.GameName}] 쓰로틀은 특수 처리가 필요합니다: 장치 설정을 모든 게임이 같이 쓰므로, " +
+                           "[Steam에 적용]할 때 쓰로틀을 쓸 게임 하나를 고릅니다 (다른 게임의 쓰로틀 매핑은 그때 적용되지 않음).");
+            foreach (var axis in throttle.GroupBy(b => b.Source.Axis!.Value).Where(x => x.Count() >= 2))
             {
-                var (low, high) = b.TriggerRange();
-                var name = $"[{game.GameName}] {b.Source.DisplayName} → {XboxOutputInfo.DisplayName(b.Target)}";
-                if (b.Source.AxisSign < 0 && high > 50)
-                    r.Errors.Add($"{name}: − 방향(0%에서 최대) 범위는 0~50% 안이어야 합니다 (지금 {low}~{high}%). 쓰로틀은 가운데에서 반으로 나뉩니다.");
-                if (b.Source.AxisSign > 0 && low < 50)
-                    r.Errors.Add($"{name}: 쓰로틀을 − 방향으로도 쓰므로 + 방향(100%에서 최대) 범위는 50~100% 안이어야 합니다 (지금 {low}~{high}%).");
+                var axisName = PhysicalInput.AxisDisplayName(axis.Key);
+                if (axis.Count() > 2 || !axis.Any(b => b.Source.AxisSign < 0) || !axis.Any(b => b.Source.AxisSign > 0))
+                {
+                    r.Errors.Add($"[{game.GameName}] {axisName}: 쓰로틀 매핑 2개는 하나는 0%쪽(−), 하나는 100%쪽(+)이어야 합니다.");
+                    continue;
+                }
+                foreach (var b in axis)
+                {
+                    var (low, high) = b.TriggerRange();
+                    var name = $"[{game.GameName}] {b.Source.DisplayName} → {XboxOutputInfo.DisplayName(b.Target)}";
+                    if (b.Source.AxisSign < 0 && high > 50)
+                        r.Errors.Add($"{name}: 쓰로틀 매핑이 2개라 가운데에서 나뉘므로 − 범위는 0~50% 안이어야 합니다 (지금 {low}~{high}%).");
+                    if (b.Source.AxisSign > 0 && low < 50)
+                        r.Errors.Add($"{name}: 쓰로틀 매핑이 2개라 가운데에서 나뉘므로 + 범위는 50~100% 안이어야 합니다 (지금 {low}~{high}%).");
+                }
             }
         }
 
-        var layout = SteamLayoutPlanner.BuildLayout(profile, null);
-        foreach (var game in profile.Games)
+        // 장치 설정 계획은 게임마다 "그 게임이 쓰로틀 게임으로 골랐을 때"로 검사한다
+        // (실제 적용 때 쓰로틀은 고른 게임 하나만 들어감)
+        var original = profile;
+        foreach (var game in original.Games)
         {
             var label = $"[{game.GameName}] ";
-            var view = profile.GameView(game);
-            var v = ValidateProfile(view);
+            var v = ValidateProfile(original.GameView(game));
             r.Merge(Prefix(label, v));
             if (!v.IsValid) continue;
+            var effective = SteamApplyService.WithThrottleFrom(original, game.AppId);
+            var layoutFor = SteamLayoutPlanner.BuildLayout(effective, null);
             var reasons = new List<string>();
-            if (SteamLayoutPlanner.TryPlan(layout, view, reasons) == null)
+            if (SteamLayoutPlanner.TryPlan(layoutFor, effective.GameView(effective.FindGame(game.AppId)!), reasons) == null)
                 r.Errors.AddRange(reasons.Distinct().Select(x => label + x + " (장치 레이아웃으로 표현할 수 없음)"));
         }
         return r;
