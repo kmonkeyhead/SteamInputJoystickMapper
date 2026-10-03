@@ -152,8 +152,17 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
 
             var genLog = new List<string>();
             var baseDoc = SteamConfigGenerator.LoadBase(target.PerGamePath, env.SteamPath);
-            var text = VdfWriter.Write(SteamConfigGenerator.Generate(baseDoc.Root, view, perGamePlan, genLog));
+            var doc = SteamConfigGenerator.Generate(baseDoc.Root, view, perGamePlan, genLog);
+            var text = VdfWriter.Write(doc);
             AddWriteIfChanged(plan, target.PerGamePath, text);
+            // Steam "내 레이아웃"에는 게임 폴더의 파일마다 항목이 하나씩 보인다. 이전 버전이 다른 파일 이름으로 만든
+            // 같은 이름(title)의 레이아웃이 남아 있으면 같은 내용으로 덮어써, 어느 항목을 골라도 같은 매핑이 되게 한다.
+            var title = doc.Get("controller_mappings")?.GetValue("title");
+            foreach (var same in SameNameLayouts(target.PerGamePath, title))
+            {
+                AddWriteIfChanged(plan, same, text);
+                plan.Notes.Add($"[{game.GameName}] " + T("같은 이름의 레이아웃도 덮어씀: ", "Also overwrites the layout with the same name: ") + Path.GetFileName(same));
+            }
             configset = SteamConfigGenerator.UpdateConfigset(configset, game.AppId);
 
             var selection = SteamInputConfigFinder.ReadSelection(target);
@@ -290,6 +299,22 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
     {
         try { return SteamConfigGenerator.IsManaged(VdfParser.ParseFile(path)); }
         catch (Exception ex) when (ex is VdfParseException or IOException) { return false; }
+    }
+
+    /// <summary>같은 게임 폴더에서 이 앱이 만든, 제목이 같은 다른 레이아웃 파일 (configset/preferences 제외).</summary>
+    public static IEnumerable<string> SameNameLayouts(string perGamePath, string? title)
+    {
+        var dir = Path.GetDirectoryName(perGamePath);
+        if (string.IsNullOrEmpty(title) || dir == null || !Directory.Exists(dir)) yield break;
+        foreach (var file in Directory.EnumerateFiles(dir, "*.vdf"))
+        {
+            if (string.Equals(file, perGamePath, StringComparison.OrdinalIgnoreCase)) continue;
+            VdfNode? root;
+            try { root = VdfParser.ParseFile(file); }
+            catch (Exception ex) when (ex is VdfParseException or IOException) { continue; }
+            if (!SteamConfigGenerator.IsManaged(root)) continue;
+            if (root.Get("controller_mappings")?.GetValue("title") == title) yield return file;
+        }
     }
 
     /// <summary>이 앱이 만든 게임별 파일들 (description 표시로 식별).</summary>
