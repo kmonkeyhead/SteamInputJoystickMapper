@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -49,27 +50,59 @@ public static class SteamInputConfigFinder
     public const string GenericControllerId = "controller_generic";
 
     /// <summary>
-    /// 게임별 설정 파일의 컨트롤러 ID. 앱이 장치 설정(SDL 레이아웃)으로 일반 컨트롤러 등록을 하면 Steam은
-    /// 이 장치의 게임별 설정을 controller_generic 이름으로 읽고 쓴다 (2026-10-03 사용자 PC에서 확인:
-    /// Steam 설정 화면에서 바꾼 값이 3029750\controller_generic.vdf / configset_controller_generic.vdf에 저장됨).
+    /// 일반 컨트롤러 등록 후 기본 출력 대상. 기존 장치별 선택 정보는 FindDeviceTargets로 찾아 함께 적용한다.
     /// </summary>
     public static SteamInputTarget Resolve(string configDir, DeviceIdentity device, string appId) =>
         new() { ConfigDir = configDir, ControllerId = GenericControllerId, AppId = appId };
+
+    /// <summary>
+    /// 이 제품의 기존 장치별 설정 대상. configset 또는 게임 파일에 실제로 존재하는 VID-PID-접미사 ID만 쓴다.
+    /// VID/PID는 숫자로 비교해 앞의 0과 대소문자가 달라도 같은 제품으로 찾고, 다른 제품은 제외한다.
+    /// </summary>
+    public static IReadOnlyList<SteamInputTarget> FindDeviceTargets(string configDir, DeviceIdentity device, string appId)
+    {
+        if (!ushort.TryParse(device.Vid, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var vid) ||
+            !ushort.TryParse(device.Pid, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var pid))
+            return Array.Empty<SteamInputTarget>();
+
+        var configsetIds = Directory.Exists(configDir)
+            ? Directory.EnumerateFiles(configDir, "configset_*.vdf")
+                .Select(f => Path.GetFileNameWithoutExtension(f)["configset_".Length..])
+            : Enumerable.Empty<string>();
+        var gameIds = ExistingGameConfigs(configDir, appId).Select(Path.GetFileNameWithoutExtension);
+        bool MatchesDevice(string? id)
+        {
+            if (id == null || !ControllerIdPattern.IsMatch(id)) return false;
+            var parts = id.Split('-');
+            return parts.Length == 3 &&
+                   ushort.TryParse(parts[0], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var v) && v == vid &&
+                   ushort.TryParse(parts[1], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var p) && p == pid;
+        }
+
+        return configsetIds.Concat(gameIds).Where(MatchesDevice)
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
+            .Select(id => new SteamInputTarget { ConfigDir = configDir, ControllerId = id!, AppId = appId }).ToList();
+    }
 
     public static ConfigSelection ReadSelection(SteamInputTarget target)
     {
         if (!File.Exists(target.ConfigsetPath)) return new ConfigSelection("none", null);
         try
         {
-            var entry = VdfParser.ParseFile(target.ConfigsetPath).Get("controller_config")?.Get(target.AppId);
-            var first = entry?.Children?.FirstOrDefault(c => !c.IsObject);
-            return first == null ? new ConfigSelection("none", null) : new ConfigSelection(first.Key.ToLowerInvariant(), first.Value);
+            return ReadSelection(VdfParser.ParseFile(target.ConfigsetPath), target.AppId);
         }
         catch (Exception ex) when (ex is VdfParseException or IOException)
         {
             AppLog.Warn($"configset 분석 실패: {ex.Message}");
             return new ConfigSelection("error", ex.Message);
         }
+    }
+
+    public static ConfigSelection ReadSelection(VdfNode root, string appId)
+    {
+        var entry = root.Get("controller_config")?.Get(appId);
+        var first = entry?.Children?.FirstOrDefault(c => !c.IsObject);
+        return first == null ? new ConfigSelection("none", null) : new ConfigSelection(first.Key.ToLowerInvariant(), first.Value);
     }
 
     /// <summary>해당 게임 폴더에 이미 있는 장치 설정 파일 (다른 컨트롤러 종류 포함).</summary>

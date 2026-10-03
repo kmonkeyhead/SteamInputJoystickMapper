@@ -106,6 +106,137 @@ public class ApplyServiceTests : IDisposable
         Assert.False(_service.Prepare(p).HasChanges); // 멱등
     }
 
+    [Theory]
+    [InlineData("template", "CLOUD_1000/controller_generic")]
+    [InlineData("workshop", "999")]
+    public void DeviceSelection_UsesAppliedMapping_EvenWhenGenericMappingIsUnchanged(string kind, string value)
+    {
+        var p = Profile();
+        p.Games.Add(Game("1000", _ => { }));
+        _service.Execute(_service.Prepare(p));
+        var genericText = File.ReadAllText(GameFile("1000"));
+        var deviceFile = Path.Combine(_configDir, "1000", "44f-405-99860a.vdf");
+        var deviceConfigset = Path.Combine(_configDir, "configset_44f-405-99860a.vdf");
+        var previousText = genericText.Replace(p.ProfileName, "Previous layout").Replace("xinput_button B", "xinput_button A");
+        File.WriteAllText(deviceFile, previousText);
+        File.WriteAllText(deviceConfigset,
+            $"\"controller_config\" {{ \"1000\" {{ \"{kind}\" \"{value}\" }} \"42\" {{ \"workshop\" \"123\" }} }}");
+
+        var otherConfigset = Path.Combine(_configDir, "configset_45e-2e3-99860a.vdf");
+        const string otherSelection = "\"controller_config\" { \"1000\" { \"workshop\" \"456\" } }";
+        File.WriteAllText(otherConfigset, otherSelection);
+
+        var plan = _service.Prepare(p);
+        Assert.True(plan.CanApply, string.Join("\n", plan.Validation.Errors));
+        Assert.DoesNotContain(GameFile("1000"), plan.Writes.Keys);
+        Assert.Contains(deviceFile, plan.Writes.Keys);
+        Assert.Contains(deviceConfigset, plan.Writes.Keys);
+        Assert.DoesNotContain(otherConfigset, plan.Writes.Keys);
+        var backup = _service.Execute(plan);
+
+        Assert.Equal(genericText, File.ReadAllText(deviceFile));
+        var selection = VdfParser.ParseFile(deviceConfigset).Find("controller_config", "1000")!;
+        Assert.Single(selection.Children!);
+        Assert.Equal("1", selection.GetValue("autosave"));
+        Assert.Equal("123", VdfParser.ParseFile(deviceConfigset).Find("controller_config", "42")!.GetValue("workshop"));
+        Assert.Equal(otherSelection, File.ReadAllText(otherConfigset));
+        var savedFile = backup.Files.Single(f => f.OriginalPath == deviceFile);
+        Assert.Equal(previousText, File.ReadAllText(Path.Combine(backup.Folder, savedFile.StoredName!)));
+        Assert.Contains(backup.Files, f => f.OriginalPath == deviceConfigset && f.Existed);
+        Assert.False(_service.Prepare(p).HasChanges);
+
+        // 이후 매핑을 바꿔도 선택된 장치별 autosave 파일에 같은 새 내용이 쓰인다.
+        p.Games[0].Bindings.First(b => b.Target == XboxOutput.B).Target = XboxOutput.RB;
+        _service.Execute(_service.Prepare(p));
+        Assert.Equal(File.ReadAllText(GameFile("1000")), File.ReadAllText(deviceFile));
+        Assert.False(_service.Prepare(p).HasChanges);
+    }
+
+    [Fact]
+    public void DeviceSelection_ChangeAlone_IsDetectedAndApplied()
+    {
+        var p = Profile();
+        p.Games.Add(Game("1000", _ => { }));
+        _service.Execute(_service.Prepare(p));
+        var deviceFile = Path.Combine(_configDir, "1000", "44f-405-99860a.vdf");
+        File.Copy(GameFile("1000"), deviceFile);
+        var deviceConfigset = Path.Combine(_configDir, "configset_44f-405-99860a.vdf");
+        File.WriteAllText(deviceConfigset, "\"controller_config\" { \"1000\" { \"template\" \"CLOUD_1000/controller_generic\" } }");
+
+        var plan = _service.Prepare(p);
+        Assert.True(plan.CanApply, string.Join("\n", plan.Validation.Errors));
+        Assert.Equal(deviceConfigset, Assert.Single(plan.Writes).Key);
+        _service.Execute(plan);
+        Assert.Equal("1", VdfParser.ParseFile(deviceConfigset).Find("controller_config", "1000")!.GetValue("autosave"));
+        Assert.False(_service.Prepare(p).HasChanges);
+    }
+
+    [Fact]
+    public void DeviceConfigset_SelectsAllAppliedGames_AndKeepsOtherGames()
+    {
+        var p = Profile();
+        p.Games.Add(Game("1000", _ => { }));
+        p.Games.Add(Game("2000", b => b.First(x => x.Target == XboxOutput.B).Target = XboxOutput.RB));
+        var deviceConfigset = Path.Combine(_configDir, "configset_44f-405-99860a.vdf");
+        File.WriteAllText(deviceConfigset,
+            "\"controller_config\" { \"1000\" { \"workshop\" \"99\" } \"2000\" { \"template\" \"old\" } \"42\" { \"workshop\" \"123\" } }");
+
+        var plan = _service.Prepare(p);
+        Assert.True(plan.CanApply, string.Join("\n", plan.Validation.Errors));
+        _service.Execute(plan);
+        var selections = VdfParser.ParseFile(deviceConfigset).Get("controller_config")!;
+        foreach (var appId in new[] { "1000", "2000" })
+        {
+            Assert.Equal("1", selections.Get(appId)!.GetValue("autosave"));
+            Assert.Single(selections.Get(appId)!.Children!);
+            Assert.Equal(File.ReadAllText(GameFile(appId)), File.ReadAllText(Path.Combine(_configDir, appId, "44f-405-99860a.vdf")));
+        }
+        Assert.Equal("123", selections.Get("42")!.GetValue("workshop"));
+        Assert.False(_service.Prepare(p).HasChanges);
+    }
+
+    [Theory]
+    [InlineData("44f-405-99860a")]
+    [InlineData("044F-0405-AbC123")]
+    public void DeviceTargets_ExistingGameFile_GetsASelectionWithoutGuessingControllerId(string controllerId)
+    {
+        var p = Profile();
+        p.Games.Add(Game("1000", _ => { }));
+        var gameDir = Path.Combine(_configDir, "1000");
+        Directory.CreateDirectory(gameDir);
+        var deviceFile = Path.Combine(gameDir, controllerId + ".vdf");
+        File.WriteAllText(deviceFile, VdfWriter.Write(SteamConfigGenerator.MinimalTemplate()));
+        var otherFile = Path.Combine(gameDir, "144f-405-99860a.vdf");
+        const string otherText = "\"controller_mappings\" { \"title\" \"Other device\" }";
+        File.WriteAllText(otherFile, otherText);
+        var deviceConfigset = Path.Combine(_configDir, "configset_" + controllerId + ".vdf");
+
+        var plan = _service.Prepare(p);
+        Assert.True(plan.CanApply, string.Join("\n", plan.Validation.Errors));
+        Assert.Contains(deviceConfigset, plan.Writes.Keys);
+        Assert.DoesNotContain(otherFile, plan.Writes.Keys);
+        _service.Execute(plan);
+        Assert.Equal("1", VdfParser.ParseFile(deviceConfigset).Find("controller_config", "1000")!.GetValue("autosave"));
+        Assert.Equal(File.ReadAllText(GameFile("1000")), File.ReadAllText(deviceFile));
+        Assert.Equal(otherText, File.ReadAllText(otherFile));
+        Assert.False(_service.Prepare(p).HasChanges);
+    }
+
+    [Fact]
+    public void DeviceConfigset_ParseFailure_BlocksApply()
+    {
+        var p = Profile();
+        p.Games.Add(Game("1000", _ => { }));
+        var deviceConfigset = Path.Combine(_configDir, "configset_44f-405-99860a.vdf");
+        const string broken = "\"controller_config\" { \"1000\" {";
+        File.WriteAllText(deviceConfigset, broken);
+
+        var plan = _service.Prepare(p);
+        Assert.False(plan.CanApply);
+        Assert.Contains(plan.Validation.Errors, e => e.Contains("configset_44f-405-99860a.vdf"));
+        Assert.Equal(broken, File.ReadAllText(deviceConfigset));
+    }
+
     [Fact]
     public void GamesWithDifferentInputs_EachGetOwnMapping()
     {

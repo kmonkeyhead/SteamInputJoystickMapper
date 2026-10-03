@@ -137,6 +137,8 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
         }
         var configset = configsetRoot?.DeepClone() ?? VdfNode.CreateObject("");
         configset.GetOrAddObject("controller_config");
+        var deviceConfigsets = new Dictionary<string, VdfNode>(StringComparer.OrdinalIgnoreCase);
+        var unreadableConfigsets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var game in profile.Games)
         {
@@ -165,6 +167,34 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
             }
             configset = SteamConfigGenerator.UpdateConfigset(configset, game.AppId);
 
+            // Steam에 장치별 선택(workshop/template 등)이 남아 있어도 이번 매핑을 사용하도록 한다.
+            // autosave는 그 컨트롤러 ID의 게임 파일을 가리키므로 파일과 선택 정보를 항상 함께 갱신한다.
+            foreach (var deviceTarget in SteamInputConfigFinder.FindDeviceTargets(configDir, device, game.AppId))
+            {
+                var path = deviceTarget.ConfigsetPath;
+                if (unreadableConfigsets.Contains(path)) continue;
+                if (!deviceConfigsets.TryGetValue(path, out var deviceConfigset))
+                {
+                    try
+                    {
+                        deviceConfigset = File.Exists(path) ? VdfParser.ParseFile(path) : VdfNode.CreateObject("");
+                    }
+                    catch (Exception ex) when (ex is VdfParseException or IOException)
+                    {
+                        unreadableConfigsets.Add(path);
+                        validation.Errors.Add(Path.GetFileName(path) + T(": 분석 실패 - 변경하지 않습니다: ", ": failed to parse - leaving it unchanged: ") + ex.Message);
+                        continue;
+                    }
+                }
+                var previous = SteamInputConfigFinder.ReadSelection(deviceConfigset, game.AppId);
+                deviceConfigsets[path] = SteamConfigGenerator.UpdateConfigset(deviceConfigset, game.AppId);
+                AddWriteIfChanged(plan, deviceTarget.PerGamePath, text);
+                SteamConfigValidator.ValidateControllerId(validation, deviceTarget.ControllerId);
+                if (previous.Kind != "autosave" || previous.Value != "1")
+                    plan.Notes.Add($"[{game.GameName}] " + T("사용할 레이아웃 선택: ", "Selected layout: ") +
+                                   $"{deviceTarget.ControllerId}: {previous} → " + T("이번 게임 매핑(autosave)", "this game's mapping (autosave)"));
+            }
+
             var selection = SteamInputConfigFinder.ReadSelection(target);
             plan.Games.Add(new GameApplyItem
             {
@@ -178,6 +208,9 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
                                  $"[{game.GameName}] currently uses {selection} → it will be replaced by this app's game mapping."));
             plan.Notes.AddRange(genLog.Select(l => $"[{game.GameName}] {l}"));
         }
+
+        foreach (var (path, root) in deviceConfigsets)
+            AddWriteIfChanged(plan, path, VdfWriter.Write(root));
 
         // ---- (3) 게임 매핑이 삭제된 게임: 앱이 만든 파일만 정리 ----
         foreach (var (appId, path) in FindManagedGames(configDir, controllerTarget.ControllerId))
@@ -235,7 +268,7 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
         {
             if (string.Equals(path, env.GlobalConfigPath, StringComparison.OrdinalIgnoreCase))
                 SteamConfigValidator.ValidateGlobal(validation, text, layout);
-            else if (string.Equals(path, controllerTarget.ConfigsetPath, StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(path, controllerTarget.ConfigsetPath, StringComparison.OrdinalIgnoreCase) || deviceConfigsets.ContainsKey(path))
                 SteamConfigValidator.ValidateConfigset(validation, text);
             else if (string.Equals(path, localConfig, StringComparison.OrdinalIgnoreCase))
                 continue; // SteamInputSetting.EnableFor에서 의도한 값만 바뀌었는지 검증함
