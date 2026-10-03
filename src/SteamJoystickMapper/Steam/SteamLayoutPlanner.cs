@@ -138,8 +138,12 @@ public static class SteamLayoutPlanner
     {
         var (low, high) = b.TriggerRange();
         var (start, end) = b.Source.AxisSign < 0 ? (100 - high, 100 - low) : (low, high);
-        return (InnerDeadZoneUnits(start), InnerDeadZoneUnits(end));
+        // 범위가 축 끝까지 닿으면 Steam 기본값(32000)을 쓴다: 축이 정확히 끝까지 가지 않아도 최대가 되도록
+        return (InnerDeadZoneUnits(start), end >= 100 ? SteamTriggerRangeEndDefault : InnerDeadZoneUnits(end));
     }
+
+    /// <summary>Steam "트리거 범위 끝" 기본값 (Steam 설정 화면에서 확인).</summary>
+    public const int SteamTriggerRangeEndDefault = 32000;
 
     /// <summary>
     /// 축은 스틱/트리거 자리에만, 버튼/POV는 버튼형 자리에만. 트리거 자리는 아날로그 축(쓰로틀 등)용으로 남겨 두고,
@@ -271,6 +275,8 @@ public static class SteamLayoutPlanner
                     var output = b.Target == XboxOutput.LT ? 1 : 2;
                     if (plan.TriggerOutputs.TryGetValue(trig, out var existingOut) && existingOut != 0 && existingOut != output) continue;
                     plan.TriggerOutputs[trig] = output;
+                    // Steam 기본 트리거 설정과 같이 "끝까지 당기기"도 같은 트리거로: 끝까지 당기면 확실히 최대
+                    plan.ButtonBindings.TryAdd((trig, "click"), output == 1 ? "TRIGGER_LEFT" : "TRIGGER_RIGHT");
                     if (directed) plan.TriggerRanges[trig] = TriggerRangeUnits(b);
                     else if (b.DeadZone > 0) plan.TriggerRanges[trig] = (InnerDeadZoneUnits(b.DeadZone), null);
                     usedElements.Add(element);

@@ -185,7 +185,11 @@ public class ThrottleToTriggersTests : IDisposable
         Assert.Equal((90 * 32767 / 100).ToString(), lt.GetValue("deadzone_outer_radius"));
         // RT: 40~100%
         Assert.Equal((40 * 32767 / 100).ToString(), rt.GetValue("deadzone_inner_radius"));
-        Assert.Equal("32767", rt.GetValue("deadzone_outer_radius"));
+        Assert.Equal("32000", rt.GetValue("deadzone_outer_radius")); // 끝까지 닿으면 Steam 기본값
+        // Steam 기본 트리거 설정과 같이 "끝까지 당기기"도 같은 트리거
+        string? Click(string source) => Group(source).Find("inputs", "click", "activators", "Full_Press", "bindings")?.GetValue("binding");
+        Assert.Equal("xinput_button TRIGGER_LEFT", Click("left_trigger"));
+        Assert.Equal("xinput_button TRIGGER_RIGHT", Click("right_trigger"));
     }
 
     [Fact]
