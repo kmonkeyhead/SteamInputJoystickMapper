@@ -356,7 +356,7 @@ public partial class MappingEditorWindow : Window
     {
         foreach (var r in _rows) r.Clear();
         ApplyBindings(Presets.AceCombat8(_profile.Device));
-        DetectStatusText.Text = T("AC8 예제 적용: 스틱 → 왼쪽 스틱, 쓰로틀 → RT(0~70%), 버튼 17 → LT, 버튼 1/2/3/4 → A/X/B/Y, 트위스트 → LB/RB, 버튼 15 → Left Stick Click, 버튼 14 → Right Stick Click, Hat → D-Pad", "AC8 example applied: stick → left stick, throttle → RT (0–70%), button 17 → LT, buttons 1/2/3/4 → A/X/B/Y, twist → LB/RB, button 15 → Left Stick Click, button 14 → Right Stick Click, hat → D-pad");
+        DetectStatusText.Text = T("AC8 예제 적용: 스틱 → 왼쪽 스틱, 쓰로틀 → RT(0~70%), 버튼 14·17 → LT, 버튼 1/2/3/4 → A/X/B/Y, 트위스트 → LB/RB, 버튼 16 → Left Stick Click, 버튼 15 → Right Stick Click, Hat → D-Pad", "AC8 example applied: stick → left stick, throttle → RT (0–70%), buttons 14·17 → LT, buttons 1/2/3/4 → A/X/B/Y, twist → LB/RB, button 16 → Left Stick Click, button 15 → Right Stick Click, hat → D-pad");
     }
 
     private void PovToDpad_Click(object sender, RoutedEventArgs e)

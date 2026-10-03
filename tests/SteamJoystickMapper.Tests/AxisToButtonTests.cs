@@ -450,12 +450,13 @@ public class AceCombat8PresetTests
     public void Preset_MatchesUserMapping_AndIsValid()
     {
         var bindings = Presets.AceCombat8(Fixtures.TA320);
-        Assert.Equal(16, bindings.Count);
+        Assert.Equal(17, bindings.Count);
         Assert.Equal(PhysicalInput.FromButton(0), bindings.Single(b => b.Target == XboxOutput.A).Source);
         Assert.Equal(PhysicalInput.FromButton(2), bindings.Single(b => b.Target == XboxOutput.B).Source);
         Assert.Equal(PhysicalInput.FromButton(1), bindings.Single(b => b.Target == XboxOutput.X).Source);
         Assert.Equal(PhysicalInput.FromButton(3), bindings.Single(b => b.Target == XboxOutput.Y).Source);
-        Assert.Equal(PhysicalInput.FromButton(16), bindings.Single(b => b.Target == XboxOutput.LT).Source); // 버튼 17
+        Assert.Equal(new[] { PhysicalInput.FromButton(16), PhysicalInput.FromButton(13) },
+            bindings.Where(b => b.Target == XboxOutput.LT).Select(b => b.Source)); // 버튼 17·14
         var rt = bindings.Single(b => b.Target == XboxOutput.RT);
         Assert.Equal(PhysicalInput.FromAxisHalf(JoyAxis.Slider0, -1), rt.Source);
         Assert.Equal((0, 70), rt.TriggerRange());
@@ -463,8 +464,8 @@ public class AceCombat8PresetTests
         Assert.Equal(PhysicalInput.FromAxisHalf(JoyAxis.Rz, +1), bindings.Single(b => b.Target == XboxOutput.RB).Source);
         Assert.Equal(0, bindings.Single(b => b.Target == XboxOutput.LB).DeadZone);
         Assert.Equal(0, bindings.Single(b => b.Target == XboxOutput.RB).DeadZone);
-        Assert.Equal(PhysicalInput.FromButton(14), bindings.Single(b => b.Target == XboxOutput.LS).Source);
-        Assert.Equal(PhysicalInput.FromButton(13), bindings.Single(b => b.Target == XboxOutput.RS).Source);
+        Assert.Equal(PhysicalInput.FromButton(15), bindings.Single(b => b.Target == XboxOutput.LS).Source);
+        Assert.Equal(PhysicalInput.FromButton(14), bindings.Single(b => b.Target == XboxOutput.RS).Source);
 
         var p = MapperProfile.CreateDefault(Fixtures.TA320);
         p.Games.Add(new GameMapping { AppId = "2288340", GameName = "ACE COMBAT 8", Bindings = bindings });
@@ -478,5 +479,9 @@ public class AceCombat8PresetTests
         Assert.Equal("b3", layout.Get("y"));
         Assert.Equal("a3~", layout.Get("righttrigger"));
         Assert.Equal("b16", layout.Get("lefttrigger"));
+        var reasons = new List<string>();
+        var plan = SteamLayoutPlanner.TryPlan(layout, p.GameView(p.Games.Single()), reasons);
+        Assert.True(plan != null, string.Join("\n", reasons));
+        Assert.Equal(2, plan!.ButtonBindings.Values.Count(value => value == "TRIGGER_LEFT"));
     }
 }
