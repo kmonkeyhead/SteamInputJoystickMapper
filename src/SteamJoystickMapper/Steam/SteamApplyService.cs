@@ -158,9 +158,10 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
             var text = VdfWriter.Write(doc);
             AddWriteIfChanged(plan, target.PerGamePath, text);
             // Steam "내 레이아웃"에는 게임 폴더의 파일마다 항목이 하나씩 보인다. 이전 버전이 다른 파일 이름으로 만든
-            // 같은 이름(title)의 레이아웃이 남아 있으면 같은 내용으로 덮어써, 어느 항목을 골라도 같은 매핑이 되게 한다.
+            // 같은 이름(title)·같은 설명(게임·장치)의 레이아웃이 남아 있으면 같은 내용으로 덮어써, 어느 항목을 골라도 같은 매핑이 되게 한다.
             var title = doc.Get("controller_mappings")?.GetValue("title");
-            foreach (var same in SameNameLayouts(target.PerGamePath, title))
+            var description = doc.Get("controller_mappings")?.GetValue("description");
+            foreach (var same in SameNameLayouts(target.PerGamePath, title, description))
             {
                 AddWriteIfChanged(plan, same, text);
                 plan.Notes.Add($"[{game.GameName}] " + T("같은 이름의 레이아웃도 덮어씀: ", "Also overwrites the layout with the same name: ") + Path.GetFileName(same));
@@ -334,8 +335,8 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
         catch (Exception ex) when (ex is VdfParseException or IOException) { return false; }
     }
 
-    /// <summary>같은 게임 폴더에서 이 앱이 만든, 제목이 같은 다른 레이아웃 파일 (configset/preferences 제외).</summary>
-    public static IEnumerable<string> SameNameLayouts(string perGamePath, string? title)
+    /// <summary>같은 게임 폴더에서 이 앱이 만든, 제목과 설명(게임·장치)이 같은 다른 레이아웃 파일. 다른 장치용은 제외.</summary>
+    public static IEnumerable<string> SameNameLayouts(string perGamePath, string? title, string? description)
     {
         var dir = Path.GetDirectoryName(perGamePath);
         if (string.IsNullOrEmpty(title) || dir == null || !Directory.Exists(dir)) yield break;
@@ -346,7 +347,8 @@ public sealed class SteamApplyService(SteamEnvironment env, BackupManager backup
             try { root = VdfParser.ParseFile(file); }
             catch (Exception ex) when (ex is VdfParseException or IOException) { continue; }
             if (!SteamConfigGenerator.IsManaged(root)) continue;
-            if (root.Get("controller_mappings")?.GetValue("title") == title) yield return file;
+            var m = root.Get("controller_mappings");
+            if (m?.GetValue("title") == title && m?.GetValue("description") == description) yield return file;
         }
     }
 
